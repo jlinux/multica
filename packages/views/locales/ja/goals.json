@@ -45,7 +45,9 @@
     "continues": "前のゴールの続き"
   },
   "chain": {
-    "clear": "ハイライトを解除"
+    "clear": "ハイライトを解除",
+    "focus": "この連鎖をハイライト",
+    "open": "ゴールを開く"
   },
   "empty": {
     "title": "ゴールがまだありません",
@@ -76,5 +78,35 @@
     "subtitle": "プロダクト別に並べたマイルストーン。見るべきは印の間隔であって、長さではありません。",
     "today": "今日",
     "unused_days_other": "リリースから {{count}} 日、まだ未利用"
+  },
+  "detail": {
+    "actual": "実績",
+    "add_milestone": "マイルストーンを追加",
+    "adoption_agent": "エージェントが調べ、根拠を報告します",
+    "adoption_analytics": "自社テレメトリのイベント閾値で判定します",
+    "adoption_verifier": "指名された人が確認します",
+    "aligns_to": "紐づく先",
+    "assignee_agent": "エージェント",
+    "back": "ゴール",
+    "continues": "続き",
+    "cycle": "サイクル",
+    "delayed": "期限超過",
+    "due": "期限",
+    "issues": "これを届ける作業",
+    "issues_hint": "継ぎ目より下:人にもエージェントにも割り当てられます",
+    "milestones": "マイルストーン",
+    "milestones_hint": "リリース → 最初の実利用 → 継続利用",
+    "no_alignment": "独立",
+    "no_issues": "紐づいた課題はまだありません",
+    "no_milestones": "マイルストーンがまだありません",
+    "no_milestones_hint": "まずリリース日を決めましょう。リリース後、実際に使われたかを問い続けます。",
+    "not_found": "そのゴールは存在しないか、このワークスペースのものではありません",
+    "owner": "担当",
+    "planned": "予定",
+    "proposal_pending_other": "{{count}} 件のエージェント提案が承認待ちです",
+    "seam_body": "方向性・プロダクト・サイクルの各ゴールは計画の単位です。タスクキューにも「自分の課題」にも現れません。エージェントが着手するのは下に紐づいた課題です。",
+    "seam_title": "このゴールはエージェントに割り当てられません",
+    "unassigned": "未割り当て",
+    "verifier": "確認者"
   }
 }

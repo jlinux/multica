@@ -305,30 +305,62 @@ func (q *Queries) ListGoalContinuations(ctx context.Context, arg ListGoalContinu
 	return items, nil
 }
 
-const listGoalIssueIDs = `-- name: ListGoalIssueIDs :many
-SELECT issue_id FROM goal_issue
-WHERE goal_id = $1 AND workspace_id = $2
-ORDER BY linked_at
+const listGoalIssues = `-- name: ListGoalIssues :many
+SELECT i.id, i.number, i.title, i.status, i.priority,
+       i.assignee_type, i.assignee_id, gi.linked_at
+FROM goal_issue gi
+JOIN issue i ON i.id = gi.issue_id
+WHERE gi.goal_id = $1 AND gi.workspace_id = $2
+ORDER BY gi.linked_at
 `
 
-type ListGoalIssueIDsParams struct {
+type ListGoalIssuesParams struct {
 	GoalID      pgtype.UUID `json:"goal_id"`
 	WorkspaceID pgtype.UUID `json:"workspace_id"`
 }
 
-func (q *Queries) ListGoalIssueIDs(ctx context.Context, arg ListGoalIssueIDsParams) ([]pgtype.UUID, error) {
-	rows, err := q.db.Query(ctx, listGoalIssueIDs, arg.GoalID, arg.WorkspaceID)
+type ListGoalIssuesRow struct {
+	ID           pgtype.UUID        `json:"id"`
+	Number       int32              `json:"number"`
+	Title        string             `json:"title"`
+	Status       string             `json:"status"`
+	Priority     string             `json:"priority"`
+	AssigneeType pgtype.Text        `json:"assignee_type"`
+	AssigneeID   pgtype.UUID        `json:"assignee_id"`
+	LinkedAt     pgtype.Timestamptz `json:"linked_at"`
+}
+
+// The work delivering a goal, with enough of each issue to render a row.
+//
+// Returning bare ids, as this did first, forced every caller into a second
+// round trip per issue or a full workspace issue list to look up a title —
+// and a list of opaque ids is not something any interface can show.
+//
+// The join is on the issue side of the seam, not the goal side: the issue
+// table still stores nothing about goals, and reversing the direction here
+// would not change that.
+func (q *Queries) ListGoalIssues(ctx context.Context, arg ListGoalIssuesParams) ([]ListGoalIssuesRow, error) {
+	rows, err := q.db.Query(ctx, listGoalIssues, arg.GoalID, arg.WorkspaceID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []pgtype.UUID{}
+	items := []ListGoalIssuesRow{}
 	for rows.Next() {
-		var issue_id pgtype.UUID
-		if err := rows.Scan(&issue_id); err != nil {
+		var i ListGoalIssuesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Number,
+			&i.Title,
+			&i.Status,
+			&i.Priority,
+			&i.AssigneeType,
+			&i.AssigneeID,
+			&i.LinkedAt,
+		); err != nil {
 			return nil, err
 		}
-		items = append(items, issue_id)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

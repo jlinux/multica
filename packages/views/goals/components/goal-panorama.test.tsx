@@ -3,6 +3,7 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Goal } from "@multica/core/goals";
 import { renderWithI18n } from "../../test/i18n";
+import { NavigationProvider, type NavigationAdapter } from "../../navigation";
 import { GoalPanorama } from "./goal-panorama";
 
 const mocks = vi.hoisted(() => ({
@@ -27,6 +28,13 @@ vi.mock("@multica/core/goals", () => ({
 
 vi.mock("@multica/core/hooks", () => ({
   useWorkspaceId: () => "workspace-1",
+}));
+
+vi.mock("@multica/core/paths", () => ({
+  useWorkspacePaths: () => ({
+    goals: () => "/test-workspace/goals",
+    goalDetail: (id: string) => `/test-workspace/goals/${id}`,
+  }),
 }));
 
 function goal(over: Partial<Goal> & { id: string }): Goal {
@@ -72,9 +80,39 @@ function alignedTree(): Goal[] {
   ];
 }
 
+function makeAdapter(overrides: Partial<NavigationAdapter> = {}): NavigationAdapter {
+  return {
+    push: vi.fn(),
+    replace: vi.fn(),
+    back: vi.fn(),
+    pathname: "/test-workspace/goals",
+    searchParams: new URLSearchParams(),
+    hash: "",
+    getShareableUrl: (p) => p,
+    ...overrides,
+  };
+}
+
+function renderPanorama(adapter = makeAdapter()) {
+  renderWithI18n(
+    <NavigationProvider value={adapter}>
+      <GoalPanorama />
+    </NavigationProvider>,
+  );
+  return adapter;
+}
+
+function chainToggleIn(card: HTMLElement): HTMLElement {
+  const toggle = card.querySelector("button");
+  if (!toggle) throw new Error("no chain toggle rendered in the card");
+  return toggle as HTMLElement;
+}
+
 function cardFor(title: string): HTMLElement {
-  const card = screen.getByText(title).closest("button");
-  if (!card) throw new Error(`no goal card rendered for ${title}`);
+  // The card is a div that navigates, not a button: the chain toggle inside it
+  // is the button, and nesting one in the other would be invalid.
+  const card = screen.getByText(title).closest("[class*='rounded-lg'][class*='border']");
+  if (!(card instanceof HTMLElement)) throw new Error(`no goal card rendered for ${title}`);
   return card;
 }
 
@@ -90,7 +128,7 @@ describe("GoalPanorama", () => {
     // three labelled voids. Opening on the whole empty model is what makes a
     // first-time reader close the tab, so absent tiers stay absent.
     mocks.goals = [goal({ id: "c1", title: "Console 2.1" })];
-    renderWithI18n(<GoalPanorama />);
+    renderPanorama();
 
     expect(screen.getByText("Cycle goals")).toBeInTheDocument();
     expect(screen.queryByText("Direction")).not.toBeInTheDocument();
@@ -98,7 +136,7 @@ describe("GoalPanorama", () => {
   });
 
   it("shows an empty state instead of empty bands when there is nothing at all", () => {
-    renderWithI18n(<GoalPanorama />);
+    renderPanorama();
 
     expect(screen.getByText("No goals yet")).toBeInTheDocument();
     expect(screen.queryByText("Cycle goals")).not.toBeInTheDocument();
@@ -121,7 +159,7 @@ describe("GoalPanorama", () => {
         orphan_reason: "One-off request; no lasting product line.",
       }),
     ];
-    renderWithI18n(<GoalPanorama />);
+    renderPanorama();
 
     const section = screen.getByRole("heading", { name: "Unaligned goals" });
     expect(section).toBeInTheDocument();
@@ -139,7 +177,7 @@ describe("GoalPanorama", () => {
       goal({ id: "c1", title: "Console 2.1" }),
       goal({ id: "c2", title: "Billing v1" }),
     ];
-    renderWithI18n(<GoalPanorama />);
+    renderPanorama();
 
     expect(screen.getByText("Cycle goals")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Unaligned goals" })).not.toBeInTheDocument();
@@ -151,7 +189,7 @@ describe("GoalPanorama", () => {
       goal({ id: "d2", level: 1, title: "Carried direction", child_count: 1 }),
       goal({ id: "c1", title: "Leaf cycle goal", parent_goal_id: "d2", child_count: 0 }),
     ];
-    renderWithI18n(<GoalPanorama />);
+    renderPanorama();
 
     const warnings = screen.getAllByText("Nothing is picking this up yet");
     expect(warnings).toHaveLength(1);
@@ -168,9 +206,9 @@ describe("GoalPanorama", () => {
       goal({ id: "d2", level: 1, title: "Unrelated direction", child_count: 1 }),
       goal({ id: "p2", level: 2, title: "Unrelated product", kind: "brk", parent_goal_id: "d2" }),
     ];
-    renderWithI18n(<GoalPanorama />);
+    renderPanorama();
 
-    await user.click(cardFor("Console rebuild"));
+    await user.click(chainToggleIn(cardFor("Console rebuild")));
 
     // Ancestors AND descendants: a reader clicking a product goal is asking
     // where it came from and what is carrying it, and half an answer costs
@@ -186,29 +224,29 @@ describe("GoalPanorama", () => {
   it("keeps the selected card distinguishable by something hover does not touch", async () => {
     const user = userEvent.setup();
     mocks.goals = alignedTree();
-    renderWithI18n(<GoalPanorama />);
+    renderPanorama();
 
     const card = cardFor("Console rebuild");
-    await user.click(card);
+    await user.click(chainToggleIn(card));
 
     // Hover changes the background, so a selection carried by a background
     // tint alone would visually downgrade to plain hover under the pointer.
     // The ring is the dimension hover never touches.
-    expect(card).toHaveAttribute("aria-pressed", "true");
+    expect(chainToggleIn(card)).toHaveAttribute("aria-pressed", "true");
     expect(card.className).toContain("ring-2");
   });
 
   it("clears the highlight when the same goal is clicked again", async () => {
     const user = userEvent.setup();
     mocks.goals = alignedTree();
-    renderWithI18n(<GoalPanorama />);
+    renderPanorama();
 
     const card = cardFor("Console rebuild");
-    await user.click(card);
+    await user.click(chainToggleIn(card));
     expect(cardFor("Console 2.0")).not.toHaveClass("opacity-30");
 
-    await user.click(card);
-    expect(card).toHaveAttribute("aria-pressed", "false");
+    await user.click(chainToggleIn(card));
+    expect(chainToggleIn(card)).toHaveAttribute("aria-pressed", "false");
     expect(cardFor("Console 2.0")).not.toHaveClass("opacity-30");
   });
 
@@ -220,22 +258,25 @@ describe("GoalPanorama", () => {
     mocks.goals = [
       goal({ id: "c1", title: "Orphaned by paging", parent_goal_id: "missing-parent" }),
     ];
-    renderWithI18n(<GoalPanorama />);
+    renderPanorama();
 
-    await user.click(cardFor("Orphaned by paging"));
-    expect(cardFor("Orphaned by paging")).toHaveAttribute("aria-pressed", "true");
+    await user.click(chainToggleIn(cardFor("Orphaned by paging")));
+    expect(chainToggleIn(cardFor("Orphaned by paging"))).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 
   it("renders an accessible busy state while loading", () => {
     mocks.isPending = true;
-    renderWithI18n(<GoalPanorama />);
+    renderPanorama();
     expect(screen.getByLabelText("Loading goals")).toHaveAttribute("aria-busy");
   });
 
   it("offers a retry rather than a blank page when the request fails", async () => {
     const user = userEvent.setup();
     mocks.isError = true;
-    renderWithI18n(<GoalPanorama />);
+    renderPanorama();
 
     await user.click(screen.getByRole("button", { name: "Try again" }));
     expect(mocks.refetch).toHaveBeenCalled();
@@ -243,7 +284,12 @@ describe("GoalPanorama", () => {
 
   it("renders localized copy", () => {
     mocks.goals = [goal({ id: "c1", title: "控制台 2.1" })];
-    renderWithI18n(<GoalPanorama />, { locale: "zh-Hans" });
+    renderWithI18n(
+      <NavigationProvider value={makeAdapter()}>
+        <GoalPanorama />
+      </NavigationProvider>,
+      { locale: "zh-Hans" },
+    );
     expect(screen.getByText("阶段目标")).toBeInTheDocument();
     expect(screen.getByText("方向、产品目标,以及这个阶段要交付什么")).toBeInTheDocument();
   });

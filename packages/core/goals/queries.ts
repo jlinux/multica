@@ -63,10 +63,10 @@ export function goalDetailOptions(wsId: string, id: string) {
   });
 }
 
-export function goalIssueIdsOptions(wsId: string, goalId: string) {
+export function goalIssuesOptions(wsId: string, goalId: string) {
   return queryOptions({
     queryKey: goalKeys.issues(wsId, goalId),
-    queryFn: () => api.listGoalIssueIds(goalId),
+    queryFn: () => api.listGoalIssues(goalId),
     enabled: goalId !== "",
   });
 }

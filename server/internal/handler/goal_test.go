@@ -209,13 +209,22 @@ func TestGoalIssueLinkIsStoredOnlyOnTheGoalSide(t *testing.T) {
 		}), "id", cycle.ID)).Want(http.StatusOK)
 
 	var linked struct {
-		IssueIDs []string `json:"issue_ids"`
+		Issues []GoalIssueResponse `json:"issues"`
 	}
 	testutil.Call(t, testHandler.ListGoalIssues,
 		withURLParam(newRequest("GET", "/api/goals/"+cycle.ID+"/issues", nil), "id", cycle.ID)).
 		Want(http.StatusOK).JSON(&linked)
-	if len(linked.IssueIDs) != 1 || linked.IssueIDs[0] != issueID {
-		t.Fatalf("issue_ids = %v, want exactly [%s]", linked.IssueIDs, issueID)
+	if len(linked.Issues) != 1 || linked.Issues[0].ID != issueID {
+		t.Fatalf("issues = %v, want exactly the linked issue %s", linked.Issues, issueID)
+	}
+	// Enough of the issue to draw a row. Returning bare ids, as this did first,
+	// forces every caller into a second round trip or a whole-workspace issue
+	// list just to find a title.
+	if linked.Issues[0].Title != "Keyboard shortcut system" {
+		t.Errorf("title = %q, want the issue's own title", linked.Issues[0].Title)
+	}
+	if linked.Issues[0].Number == 0 {
+		t.Error("number is required to render the issue identifier")
 	}
 
 	var fromIssue struct {

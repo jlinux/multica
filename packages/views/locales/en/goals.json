@@ -46,7 +46,9 @@
     "continues": "Continues an earlier goal"
   },
   "chain": {
-    "clear": "Clear highlight"
+    "clear": "Clear highlight",
+    "focus": "Highlight this chain",
+    "open": "Open goal"
   },
   "empty": {
     "title": "No goals yet",
@@ -80,5 +82,36 @@
     "today": "Today",
     "unused_days_one": "Shipped {{count}} day ago, still unused",
     "unused_days_other": "Shipped {{count}} days ago, still unused"
+  },
+  "detail": {
+    "actual": "Landed",
+    "add_milestone": "Add a milestone",
+    "adoption_agent": "An agent checks and reports evidence",
+    "adoption_analytics": "An event threshold in your own telemetry",
+    "adoption_verifier": "A named person confirms",
+    "aligns_to": "Aligns to",
+    "assignee_agent": "Agent",
+    "back": "Goals",
+    "continues": "Continues",
+    "cycle": "Cycle",
+    "delayed": "Overdue",
+    "due": "Due",
+    "issues": "Work delivering this",
+    "issues_hint": "Below the seam: assignable to a person or an agent",
+    "milestones": "Milestones",
+    "milestones_hint": "Launch, then first real use, then continued use",
+    "no_alignment": "Stands alone",
+    "no_issues": "No issues linked yet",
+    "no_milestones": "No milestones yet",
+    "no_milestones_hint": "Give this goal a launch date. After it ships, the system asks whether anyone used it.",
+    "not_found": "That goal does not exist, or is not in this workspace",
+    "owner": "Owner",
+    "planned": "Planned",
+    "proposal_pending_one": "{{count}} agent proposal waiting on you",
+    "proposal_pending_other": "{{count}} agent proposals waiting on you",
+    "seam_body": "Direction, product and cycle goals are planning units: they never enter the task queue and never appear in My Issues. The work an agent picks up is an issue linked below.",
+    "seam_title": "This goal cannot be assigned to an agent",
+    "unassigned": "Unassigned",
+    "verifier": "Verified by"
   }
 }

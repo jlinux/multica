@@ -244,7 +244,8 @@ import {
   EMPTY_MILESTONE_LIST,
   EMPTY_MILESTONE_PROPOSAL_LIST,
   EMPTY_MILESTONE_RELEASE_LIST,
-  GoalIssueIDsSchema,
+  EMPTY_GOAL_ISSUE_LIST,
+  GoalIssueListSchema,
   GoalListSchema,
   GoalSchema,
   MilestoneDateChangeListSchema,
@@ -259,6 +260,7 @@ import type {
   CreateGoalRequest,
   CreateMilestoneRequest,
   Goal,
+  GoalIssue,
   GoalListResponse,
   Milestone,
   MilestoneListResponse,
@@ -4810,11 +4812,11 @@ export class ApiClient {
     await this.fetch(`/api/goals/${id}`, { method: "DELETE" });
   }
 
-  async listGoalIssueIds(goalId: string): Promise<string[]> {
+  async listGoalIssues(goalId: string): Promise<GoalIssue[]> {
     const raw = await this.fetch<unknown>(`/api/goals/${goalId}/issues`);
-    return parseWithFallback(raw, GoalIssueIDsSchema, { issue_ids: [], total: 0 }, {
+    return parseWithFallback(raw, GoalIssueListSchema, EMPTY_GOAL_ISSUE_LIST, {
       endpoint: "GET /api/goals/:id/issues",
-    }).issue_ids;
+    }).issues;
   }
 
   async linkGoalIssue(goalId: string, issueId: string): Promise<void> {

@@ -106,10 +106,22 @@ WHERE goal_id = $1 AND issue_id = $2 AND workspace_id = $3;
 -- name: DeleteGoalIssueLinksForGoal :exec
 DELETE FROM goal_issue WHERE goal_id = $1 AND workspace_id = $2;
 
--- name: ListGoalIssueIDs :many
-SELECT issue_id FROM goal_issue
-WHERE goal_id = $1 AND workspace_id = $2
-ORDER BY linked_at;
+-- name: ListGoalIssues :many
+-- The work delivering a goal, with enough of each issue to render a row.
+--
+-- Returning bare ids, as this did first, forced every caller into a second
+-- round trip per issue or a full workspace issue list to look up a title —
+-- and a list of opaque ids is not something any interface can show.
+--
+-- The join is on the issue side of the seam, not the goal side: the issue
+-- table still stores nothing about goals, and reversing the direction here
+-- would not change that.
+SELECT i.id, i.number, i.title, i.status, i.priority,
+       i.assignee_type, i.assignee_id, gi.linked_at
+FROM goal_issue gi
+JOIN issue i ON i.id = gi.issue_id
+WHERE gi.goal_id = $1 AND gi.workspace_id = $2
+ORDER BY gi.linked_at;
 
 -- name: ListGoalsForIssue :many
 -- "Which goals does this issue serve?", asked on every issue detail render.

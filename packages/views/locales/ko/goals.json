@@ -45,7 +45,9 @@
     "continues": "이전 목표의 연속"
   },
   "chain": {
-    "clear": "강조 해제"
+    "clear": "강조 해제",
+    "focus": "이 연결을 강조",
+    "open": "목표 열기"
   },
   "empty": {
     "title": "아직 목표가 없습니다",
@@ -76,5 +78,35 @@
     "subtitle": "제품별로 펼친 마일스톤. 여기서 중요한 것은 표시 사이의 거리이지 길이가 아닙니다.",
     "today": "오늘",
     "unused_days_other": "출시 {{count}}일째, 아직 미사용"
+  },
+  "detail": {
+    "actual": "실제",
+    "add_milestone": "마일스톤 추가",
+    "adoption_agent": "에이전트가 조사해 근거를 보고합니다",
+    "adoption_analytics": "자체 텔레메트리의 이벤트 임계값으로 판정합니다",
+    "adoption_verifier": "지정된 사람이 확인합니다",
+    "aligns_to": "연결 대상",
+    "assignee_agent": "에이전트",
+    "back": "목표",
+    "continues": "이어받음",
+    "cycle": "주기",
+    "delayed": "기한 초과",
+    "due": "기한",
+    "issues": "이를 전달하는 작업",
+    "issues_hint": "이음매 아래: 사람이나 에이전트에게 배정할 수 있습니다",
+    "milestones": "마일스톤",
+    "milestones_hint": "출시 → 첫 실사용 → 지속 사용",
+    "no_alignment": "독립",
+    "no_issues": "연결된 이슈가 아직 없습니다",
+    "no_milestones": "아직 마일스톤이 없습니다",
+    "no_milestones_hint": "먼저 출시일을 정하세요. 출시 후에는 실제로 쓰였는지를 계속 묻습니다.",
+    "not_found": "해당 목표가 없거나 이 워크스페이스의 것이 아닙니다",
+    "owner": "담당자",
+    "planned": "예정",
+    "proposal_pending_other": "{{count}}건의 에이전트 제안이 대기 중입니다",
+    "seam_body": "방향·제품·주기 목표는 계획 단위입니다. 작업 대기열에도, 내 이슈에도 나타나지 않습니다. 에이전트가 맡는 것은 아래에 연결된 이슈입니다.",
+    "seam_title": "이 목표는 에이전트에게 배정할 수 없습니다",
+    "unassigned": "미지정",
+    "verifier": "확인자"
   }
 }

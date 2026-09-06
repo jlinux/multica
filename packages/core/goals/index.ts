@@ -1,5 +1,6 @@
 export type {
   Goal,
+  GoalIssue,
   GoalLevel,
   GoalKind,
   GoalStatus,
@@ -27,7 +28,7 @@ export {
   milestoneKeys,
   goalListOptions,
   goalDetailOptions,
-  goalIssueIdsOptions,
+  goalIssuesOptions,
   goalsForIssueOptions,
   goalMilestonesOptions,
   milestoneDetailOptions,

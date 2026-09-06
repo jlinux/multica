@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type {
   Goal,
+  GoalIssue,
   GoalListResponse,
   Milestone,
   MilestoneListResponse,
@@ -175,9 +176,22 @@ export const MilestoneDateChangeListSchema = z
   })
   .loose();
 
-export const GoalIssueIDsSchema = z
+export const GoalIssueSchema = z
   .object({
-    issue_ids: z.array(z.string()).default([]),
+    id: z.string(),
+    number: z.number().default(0),
+    title: z.string().default(""),
+    status: z.string().default("backlog"),
+    priority: z.string().default("none"),
+    assignee_type: nullableString,
+    assignee_id: nullableString,
+    linked_at: z.string().default(""),
+  })
+  .loose();
+
+export const GoalIssueListSchema = z
+  .object({
+    issues: z.array(GoalIssueSchema).default([]),
     total: z.number().default(0),
   })
   .loose();
@@ -255,3 +269,8 @@ export const EMPTY_MILESTONE_PROPOSAL_LIST: {
   proposals: MilestoneProposal[];
   total: number;
 } = { proposals: [], total: 0 };
+
+export const EMPTY_GOAL_ISSUE_LIST: { issues: GoalIssue[]; total: number } = {
+  issues: [],
+  total: 0,
+};

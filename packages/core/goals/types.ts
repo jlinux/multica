@@ -166,6 +166,22 @@ export interface MilestoneProposal {
   created_at: string;
 }
 
+/**
+ * One issue delivering a goal: a summary, not the whole issue. This list sits
+ * under a goal, and a client that needs everything about a row follows it to
+ * the issue itself.
+ */
+export interface GoalIssue {
+  id: string;
+  number: number;
+  title: string;
+  status: string;
+  priority: string;
+  assignee_type: GoalActorType | null;
+  assignee_id: string | null;
+  linked_at: string;
+}
+
 export interface CreateGoalRequest {
   level: GoalLevel;
   title: string;

@@ -725,23 +725,47 @@ func (h *Handler) UnlinkGoalIssue(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"success": true})
 }
 
+// GoalIssueResponse is one issue delivering a goal, in the shape the goal
+// detail renders. It is a summary rather than the full issue: this list sits
+// under a goal, and a client that needs everything about one of these rows
+// follows it to the issue itself.
+type GoalIssueResponse struct {
+	ID           string  `json:"id"`
+	Number       int32   `json:"number"`
+	Title        string  `json:"title"`
+	Status       string  `json:"status"`
+	Priority     string  `json:"priority"`
+	AssigneeType *string `json:"assignee_type"`
+	AssigneeID   *string `json:"assignee_id"`
+	LinkedAt     string  `json:"linked_at"`
+}
+
 func (h *Handler) ListGoalIssues(w http.ResponseWriter, r *http.Request) {
 	g, wsUUID, ok := h.loadGoal(w, r)
 	if !ok {
 		return
 	}
-	ids, err := h.Queries.ListGoalIssueIDs(r.Context(), db.ListGoalIssueIDsParams{
+	rows, err := h.Queries.ListGoalIssues(r.Context(), db.ListGoalIssuesParams{
 		GoalID: g.ID, WorkspaceID: wsUUID,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list linked issues")
 		return
 	}
-	out := make([]string, len(ids))
-	for i, id := range ids {
-		out[i] = uuidToString(id)
+	out := make([]GoalIssueResponse, len(rows))
+	for i, row := range rows {
+		out[i] = GoalIssueResponse{
+			ID:           uuidToString(row.ID),
+			Number:       row.Number,
+			Title:        row.Title,
+			Status:       row.Status,
+			Priority:     row.Priority,
+			AssigneeType: textToPtr(row.AssigneeType),
+			AssigneeID:   uuidToPtr(row.AssigneeID),
+			LinkedAt:     timestampToString(row.LinkedAt),
+		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"issue_ids": out, "total": len(out)})
+	writeJSON(w, http.StatusOK, map[string]any{"issues": out, "total": len(out)})
 }
 
 // ListGoalsForIssue answers "which goals does this issue serve?" on the issue

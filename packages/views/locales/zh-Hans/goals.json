@@ -45,7 +45,9 @@
     "continues": "延续前序目标"
   },
   "chain": {
-    "clear": "取消高亮"
+    "clear": "取消高亮",
+    "focus": "高亮这条承接链",
+    "open": "打开目标"
   },
   "empty": {
     "title": "还没有目标",
@@ -76,5 +78,35 @@
     "subtitle": "按产品铺开的里程碑。这张图要看的是标记之间的距离,不是长度。",
     "today": "今天",
     "unused_days_other": "上线 {{count}} 天,仍无人使用"
+  },
+  "detail": {
+    "actual": "实际",
+    "add_milestone": "添加里程碑",
+    "adoption_agent": "由 agent 核查并给出证据",
+    "adoption_analytics": "由你自己埋点的事件阈值判定",
+    "adoption_verifier": "由指定的人确认",
+    "aligns_to": "承接",
+    "assignee_agent": "智能体",
+    "back": "目标",
+    "continues": "延续",
+    "cycle": "周期",
+    "delayed": "已逾期",
+    "due": "截止",
+    "issues": "承担交付的工作",
+    "issues_hint": "接缝以下:可以指派给人或 agent",
+    "milestones": "里程碑",
+    "milestones_hint": "上线 → 首次真实使用 → 持续使用",
+    "no_alignment": "独立目标",
+    "no_issues": "还没有关联 issue",
+    "no_milestones": "还没有里程碑",
+    "no_milestones_hint": "先给这个目标定一个上线时间。上线之后,系统会接着问有没有人用。",
+    "not_found": "该目标不存在,或不属于这个工作区",
+    "owner": "负责人",
+    "planned": "计划",
+    "proposal_pending_other": "{{count}} 条 agent 提议等你裁决",
+    "seam_body": "方向、产品目标、阶段目标都是规划单元:它们不进任务队列,也不出现在「我的任务」里。agent 能接手的是下方关联的 issue。",
+    "seam_title": "此目标不能指派给 agent",
+    "unassigned": "未指派",
+    "verifier": "验收人"
   }
 }

@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { AlertTriangle, Plus, Target } from "lucide-react";
+import { AlertTriangle, Plus, Target, Waypoints } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { goalListOptions, type Goal, type GoalLevel } from "@multica/core/goals";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useT } from "../../i18n";
+import { useWorkspacePaths } from "@multica/core/paths";
+import { rowLinkInteractiveProps, useRowLink } from "../../navigation";
 import { Button } from "@multica/ui/components/ui/button";
 import { Badge } from "@multica/ui/components/ui/badge";
 import { Skeleton } from "@multica/ui/components/ui/skeleton";
@@ -38,6 +40,10 @@ import { cn } from "@multica/ui/lib/utils";
 export function GoalPanorama() {
   const { t } = useT("goals");
   const wsId = useWorkspaceId();
+  const paths = useWorkspacePaths();
+  // Built once here rather than inside the map: useRowLink returns a factory
+  // precisely so the hook stays out of a loop.
+  const rowLinkFor = useRowLink();
   const { data: goals, isPending, isError, refetch } = useQuery(goalListOptions(wsId));
 
   // The lit chain, or null when nothing is selected. Local because it is a
@@ -88,6 +94,8 @@ export function GoalPanorama() {
                   chain={chain}
                   selectedId={selectedId}
                   onSelect={toggleSelection}
+                  hrefFor={(goal) => paths.goalDetail(goal.id)}
+                  rowLinkFor={rowLinkFor}
                 />
               </div>
             ))}
@@ -108,6 +116,7 @@ export function GoalPanorama() {
                       dimmed={chain !== null && !chain.has(goal.id)}
                       selected={goal.id === selectedId}
                       onSelect={toggleSelection}
+                      rowLink={rowLinkFor(paths.goalDetail(goal.id), goal.title)}
                     />
                   ))}
                 </div>
@@ -195,9 +204,19 @@ interface TierBandProps {
   chain: Set<string> | null;
   selectedId: string | null;
   onSelect: (id: string) => void;
+  hrefFor: (goal: Goal) => string;
+  rowLinkFor: ReturnType<typeof useRowLink>;
 }
 
-function TierBand({ level, goals, chain, selectedId, onSelect }: TierBandProps) {
+function TierBand({
+  level,
+  goals,
+  chain,
+  selectedId,
+  onSelect,
+  hrefFor,
+  rowLinkFor,
+}: TierBandProps) {
   const { t } = useT("goals");
   const tierKey = level === 1 ? "direction" : level === 2 ? "product" : "cycle";
   const hintKey = `${tierKey}_hint` as const;
@@ -227,6 +246,7 @@ function TierBand({ level, goals, chain, selectedId, onSelect }: TierBandProps) 
             dimmed={chain !== null && !chain.has(goal.id)}
             selected={goal.id === selectedId}
             onSelect={onSelect}
+            rowLink={rowLinkFor(hrefFor(goal), goal.title)}
           />
         ))}
       </div>
@@ -258,9 +278,10 @@ interface GoalCardProps {
   dimmed: boolean;
   selected: boolean;
   onSelect: (id: string) => void;
+  rowLink: ReturnType<ReturnType<typeof useRowLink>>;
 }
 
-function GoalCard({ goal, dimmed, selected, onSelect }: GoalCardProps) {
+function GoalCard({ goal, dimmed, selected, onSelect, rowLink }: GoalCardProps) {
   const { t } = useT("goals");
   const statusKey = goal.status in STATUS_DOT ? goal.status : "not_started";
   // An upper-tier goal nothing has picked up yet. Cycle goals are the floor,
@@ -268,15 +289,14 @@ function GoalCard({ goal, dimmed, selected, onSelect }: GoalCardProps) {
   const unpicked = goal.level !== 3 && goal.child_count === 0;
 
   return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      onClick={(event) => {
-        event.stopPropagation();
-        onSelect(goal.id);
-      }}
+    <div
+      // Opening the goal is the card's primary action, so the whole card is
+      // the link. Highlighting the chain is a reading aid and gets its own
+      // control rather than stealing the click: a card with a title on it that
+      // does not open is a dead end, and that is what it used to be.
+      {...rowLink}
       className={cn(
-        "flex w-full items-start gap-2.5 rounded-lg border p-3 text-left transition-opacity",
+        "relative flex w-full cursor-pointer items-start gap-2.5 rounded-lg border p-3 text-left transition-opacity",
         "bg-surface border-surface-border",
         // The selected state is carried by a ring and a heavier title, not by
         // a background tint: hover changes the background, so a tint-only
@@ -336,7 +356,26 @@ function GoalCard({ goal, dimmed, selected, onSelect }: GoalCardProps) {
           </span>
         ) : null}
       </span>
-    </button>
+      <button
+        type="button"
+        aria-pressed={selected}
+        aria-label={selected ? t(($) => $.chain.clear) : t(($) => $.chain.focus)}
+        title={selected ? t(($) => $.chain.clear) : t(($) => $.chain.focus)}
+        {...rowLinkInteractiveProps}
+        onClick={(event) => {
+          rowLinkInteractiveProps.onClick(event);
+          onSelect(goal.id);
+        }}
+        className={cn(
+          "shrink-0 rounded p-1 transition-colors",
+          selected
+            ? "text-brand"
+            : "text-faint-foreground hover:bg-surface-selected hover:text-foreground",
+        )}
+      >
+        <Waypoints className="size-3.5" />
+      </button>
+    </div>
   );
 }
 
