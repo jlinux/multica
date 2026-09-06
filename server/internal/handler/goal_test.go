@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/multica-ai/multica/server/internal/events"
@@ -372,5 +373,178 @@ func TestGoalWritesBroadcastToTheWorkspace(t *testing.T) {
 		Want(http.StatusOK)
 	if got := typesOf(drain()); !contains(got, protocol.EventGoalDeleted) {
 		t.Fatalf("deleting a goal published %v, want %s", got, protocol.EventGoalDeleted)
+	}
+}
+
+// Creating and editing stay open to every member — a plan only some people can
+// touch stops being shared. Deleting an upper tier does not, because it
+// detaches everything aligned to it across the workspace, which is work other
+// people are in the middle of.
+func TestDeletingAnUpperTierNeedsMoreThanMembership(t *testing.T) {
+	if testHandler == nil {
+		t.Skip("no database")
+	}
+
+	// A plain member of the fixture workspace.
+	// Insert quotes the identifier itself, so the table name goes in bare.
+	memberUserID := dbfx.Insert(t, "user", testutil.Cols{
+		"name": "Goal Delete Member", "email": "goal-delete-member@multica.ai",
+	})
+	dbfx.Insert(t, "member", testutil.Cols{
+		"workspace_id": testWorkspaceID, "user_id": memberUserID, "role": "member",
+	})
+	asMember := func(method, path string, body any) *http.Request {
+		return testutil.WithHeaders(newRequest(method, path, body), "X-User-ID", memberUserID)
+	}
+
+	direction := directionGoal(t, "Role gate direction")
+	product := productGoal(t, "Role gate product", direction.ID)
+	cycle := newGoal(t, map[string]any{
+		"level": 3, "title": "Role gate cycle", "parent_goal_id": product.ID,
+	})
+
+	t.Run("a member may still edit an upper tier", func(t *testing.T) {
+		testutil.Call(t, testHandler.UpdateGoal,
+			withURLParam(asMember("PUT", "/api/goals/"+direction.ID, map[string]any{
+				"title": "Role gate direction, renamed by a member",
+			}), "id", direction.ID)).Want(http.StatusOK)
+	})
+
+	t.Run("a member may delete a cycle goal", func(t *testing.T) {
+		// Its blast radius is its own row, so its owner keeps it.
+		own := newGoal(t, map[string]any{
+			"level": 3, "title": "Member's own cycle goal", "parent_goal_id": product.ID,
+		})
+		testutil.Call(t, testHandler.DeleteGoal,
+			withURLParam(asMember("DELETE", "/api/goals/"+own.ID, nil), "id", own.ID)).
+			Want(http.StatusOK)
+	})
+
+	t.Run("a member may not delete a product goal", func(t *testing.T) {
+		testutil.Call(t, testHandler.DeleteGoal,
+			withURLParam(asMember("DELETE", "/api/goals/"+product.ID, nil), "id", product.ID)).
+			Want(http.StatusForbidden)
+	})
+
+	t.Run("a member may not delete a direction", func(t *testing.T) {
+		testutil.Call(t, testHandler.DeleteGoal,
+			withURLParam(asMember("DELETE", "/api/goals/"+direction.ID, nil), "id", direction.ID)).
+			Want(http.StatusForbidden)
+	})
+
+	t.Run("an admin may", func(t *testing.T) {
+		// The fixture user owns the workspace.
+		testutil.Call(t, testHandler.DeleteGoal,
+			withURLParam(newRequest("DELETE", "/api/goals/"+product.ID, nil), "id", product.ID)).
+			Want(http.StatusOK)
+		// And the cycle goal beneath it survives, demoted rather than removed.
+		testutil.Call(t, testHandler.GetGoal,
+			withURLParam(newRequest("GET", "/api/goals/"+cycle.ID, nil), "id", cycle.ID)).
+			Want(http.StatusOK)
+	})
+}
+
+// The metrics are the place a goal layer most easily turns into a performance
+// instrument, so the shape is asserted, not just the arithmetic: an owner
+// dimension appearing here later would be a change of what the feature is for.
+func TestGoalMetricsCarryNoPerPersonDimension(t *testing.T) {
+	if testHandler == nil {
+		t.Skip("no database")
+	}
+	direction := directionGoal(t, "Metrics direction")
+	product := productGoal(t, "Metrics product", direction.ID)
+	newGoal(t, map[string]any{
+		"level": 3, "title": "Metrics cycle", "parent_goal_id": product.ID,
+		"cycle": "metrics-test-cycle",
+	})
+
+	var raw map[string]any
+	testutil.Call(t, testHandler.GetGoalMetrics,
+		newRequest("GET", "/api/goals/metrics", nil)).Want(http.StatusOK).JSON(&raw)
+
+	for key := range raw {
+		for _, banned := range []string{"owner", "member", "user", "assignee", "by_person", "actor"} {
+			if strings.Contains(strings.ToLower(key), banned) {
+				t.Errorf("metrics returned %q: attainment that can be sliced by person is a performance instrument, and the data stops being true once it is one", key)
+			}
+		}
+	}
+
+	// The arithmetic still has to work, or the shape guarantee is protecting
+	// nothing worth having.
+	var metrics GoalMetricsResponse
+	testutil.Call(t, testHandler.GetGoalMetrics,
+		newRequest("GET", "/api/goals/metrics?cycle=metrics-test-cycle", nil)).
+		Want(http.StatusOK).JSON(&metrics)
+	if metrics.Goals != 1 {
+		t.Errorf("goals in the named cycle = %d, want 1", metrics.Goals)
+	}
+	if metrics.Cycle != "metrics-test-cycle" {
+		t.Errorf("cycle = %q, want it echoed back", metrics.Cycle)
+	}
+}
+
+// The dates and the count are the record and everyone sees them. The reasons
+// are only worth collecting while the writer is explaining a plan rather than
+// defending one, and a log the whole workspace reads fills with "delay".
+func TestRescheduleReasonsAreNotWorkspaceReadable(t *testing.T) {
+	if testHandler == nil {
+		t.Skip("no database")
+	}
+	_, m := milestoneFixture(t, "ReasonVisibility", map[string]any{
+		"type": "launch", "title": "Ship it", "planned_date": "2026-10-03",
+	})
+	testutil.Call(t, testHandler.RescheduleMilestone,
+		withURLParam(newRequest("PATCH", "/api/milestones/"+m.ID+"/schedule", map[string]any{
+			"planned_date": "2026-10-10", "reason": "Customer rollout slipped a week.",
+		}), "milestoneId", m.ID)).Want(http.StatusOK)
+
+	read := func(req *http.Request) map[string]any {
+		var out map[string]any
+		testutil.Call(t, testHandler.ListMilestoneDateChanges,
+			withURLParam(req, "milestoneId", m.ID)).Want(http.StatusOK).JSON(&out)
+		return out
+	}
+
+	// The workspace owner runs the review and needs the reason to act on it.
+	asOwner := read(newRequest("GET", "/api/milestones/"+m.ID+"/date-changes", nil))
+	if asOwner["reasons_visible"] != true {
+		t.Fatal("a workspace owner must be able to read why a date moved")
+	}
+	ownerRows, _ := asOwner["date_changes"].([]any)
+	if len(ownerRows) != 1 {
+		t.Fatalf("date_changes = %d, want 1", len(ownerRows))
+	}
+	if first, _ := ownerRows[0].(map[string]any); first["reason"] == nil {
+		t.Error("the reason is missing for the reviewer who needs it")
+	}
+
+	// A plain member sees that it moved, and when, and not why.
+	memberUserID := dbfx.Insert(t, "user", testutil.Cols{
+		"name": "Reason Reader", "email": "reason-reader@multica.ai",
+	})
+	dbfx.Insert(t, "member", testutil.Cols{
+		"workspace_id": testWorkspaceID, "user_id": memberUserID, "role": "member",
+	})
+	asMember := read(testutil.WithHeaders(
+		newRequest("GET", "/api/milestones/"+m.ID+"/date-changes", nil),
+		"X-User-ID", memberUserID,
+	))
+	if asMember["reasons_visible"] != false {
+		t.Fatal("a plain member must not read the reasons")
+	}
+	memberRows, _ := asMember["date_changes"].([]any)
+	if len(memberRows) != 1 {
+		t.Fatalf("a member must still see THAT it moved: rows = %d, want 1", len(memberRows))
+	}
+	row, _ := memberRows[0].(map[string]any)
+	if row["reason"] != nil {
+		t.Error("the reason reached a member it was not written for")
+	}
+	if row["changed_by_id"] != nil {
+		t.Error("who moved it is part of the same answer and must not leak either")
+	}
+	if row["from_date"] == nil || row["to_date"] == nil {
+		t.Error("the dates are the record and must stay visible to everyone")
 	}
 }

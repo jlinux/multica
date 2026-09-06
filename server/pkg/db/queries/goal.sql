@@ -142,3 +142,58 @@ SELECT g.* FROM goal g
 JOIN goal_issue gi ON gi.goal_id = g.id
 WHERE gi.issue_id = $1 AND gi.workspace_id = $2 AND g.deleted_at IS NULL
 ORDER BY g.level, g.created_at;
+
+-- name: GetWorkspaceGoalMetrics :one
+-- Period-level goal metrics for one workspace.
+--
+-- There is deliberately no owner, member or agent dimension here, and adding
+-- one is not a small change to this query — it is a change of what the feature
+-- is for. The moment attainment can be sliced by person it becomes a
+-- performance instrument, and the data that feeds it stops being true: reasons
+-- for moving a date turn into whatever is safe to write down, and milestones
+-- get set late so they cannot be missed. The numbers survive only as long as
+-- nobody is scored on them.
+--
+-- Everything is counted over the whole workspace and, optionally, one cycle.
+WITH scoped_goals AS (
+    SELECT g.* FROM goal g
+    WHERE g.workspace_id = $1
+      AND g.deleted_at IS NULL
+      AND g.status <> 'archived'
+      AND (sqlc.narg('cycle')::text IS NULL OR g.cycle = sqlc.narg('cycle'))
+),
+scoped_milestones AS (
+    SELECT m.* FROM milestone m
+    JOIN scoped_goals sg ON sg.id = m.goal_id
+    WHERE m.deleted_at IS NULL
+)
+SELECT
+    (SELECT COUNT(*) FROM scoped_goals)::bigint AS goal_count,
+    -- Alignment: upper-tier goals that something beneath them has picked up.
+    (SELECT COUNT(*) FROM scoped_goals u
+       WHERE u.level < 3
+         AND EXISTS (SELECT 1 FROM scoped_goals c WHERE c.parent_goal_id = u.id)
+    )::bigint AS aligned_upper_count,
+    (SELECT COUNT(*) FROM scoped_goals WHERE level < 3)::bigint AS upper_count,
+    -- The delivery arc. launched counts goals that reached launch; adopted
+    -- counts the subset that reached a first real use. The gap between them is
+    -- the number this whole feature exists to expose.
+    (SELECT COUNT(DISTINCT goal_id) FROM scoped_milestones
+       WHERE type = 'launch' AND status = 'achieved')::bigint AS launched_count,
+    (SELECT COUNT(DISTINCT goal_id) FROM scoped_milestones
+       WHERE type = 'first_use' AND status = 'achieved')::bigint AS adopted_count,
+    -- On time is measured against the FIRST date planned, not the current one,
+    -- so a reschedule cannot launder a slip into a hit.
+    (SELECT COUNT(*) FROM scoped_milestones
+       WHERE status = 'achieved' AND actual_date IS NOT NULL)::bigint AS achieved_count,
+    (SELECT COUNT(*) FROM scoped_milestones
+       WHERE status = 'achieved' AND actual_date IS NOT NULL
+         AND actual_date <= original_planned_date)::bigint AS on_time_count,
+    -- Unfinished and past its date. Read as a queue to work, not a tally.
+    (SELECT COUNT(*) FROM scoped_milestones
+       WHERE status IN ('planned', 'in_progress', 'pending_accept')
+         AND planned_date < sqlc.arg('today')::date)::bigint AS overdue_count,
+    -- Recorded after the fact. A signal about planning granularity; the query
+    -- cannot attribute it to anyone, which is the point.
+    (SELECT COUNT(*) FROM scoped_goals WHERE is_retro)::bigint AS retro_goal_count,
+    (SELECT COUNT(*) FROM scoped_goals WHERE parent_goal_id IS NULL AND level > 1)::bigint AS orphan_count;

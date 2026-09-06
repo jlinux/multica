@@ -14,16 +14,24 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@tanstack/react-query", () => ({
-  useQuery: () => ({
-    data: mocks.goals,
-    isPending: mocks.isPending,
-    isError: mocks.isError,
-    refetch: mocks.refetch,
-  }),
+  useQuery: (options: { queryKey?: readonly unknown[] }) => {
+    // The stats strip shares this hook; it renders nothing without metrics,
+    // which is what these cases want.
+    if (options.queryKey?.[2] === "metrics") {
+      return { data: undefined, isPending: false, isError: false };
+    }
+    return {
+      data: mocks.goals,
+      isPending: mocks.isPending,
+      isError: mocks.isError,
+      refetch: mocks.refetch,
+    };
+  },
 }));
 
 vi.mock("@multica/core/goals", () => ({
   goalListOptions: () => ({ queryKey: ["goals", "workspace-1", "list", {}] }),
+  goalMetricsOptions: () => ({ queryKey: ["goals", "workspace-1", "metrics", ""] }),
 }));
 
 vi.mock("@multica/core/hooks", () => ({

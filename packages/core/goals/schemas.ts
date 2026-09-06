@@ -2,6 +2,7 @@ import { z } from "zod";
 import type {
   Goal,
   GoalIssue,
+  GoalMetrics,
   GoalListResponse,
   Milestone,
   MilestoneListResponse,
@@ -176,6 +177,22 @@ export const MilestoneDateChangeListSchema = z
   })
   .loose();
 
+export const GoalMetricsSchema = z
+  .object({
+    cycle: z.string().default(""),
+    goals: z.number().default(0),
+    aligned_upper: z.number().default(0),
+    upper_goals: z.number().default(0),
+    launched: z.number().default(0),
+    adopted: z.number().default(0),
+    achieved_milestones: z.number().default(0),
+    on_time_milestones: z.number().default(0),
+    overdue: z.number().default(0),
+    retro_goals: z.number().default(0),
+    orphan_goals: z.number().default(0),
+  })
+  .loose();
+
 export const GoalIssueSchema = z
   .object({
     id: z.string(),
@@ -273,4 +290,18 @@ export const EMPTY_MILESTONE_PROPOSAL_LIST: {
 export const EMPTY_GOAL_ISSUE_LIST: { issues: GoalIssue[]; total: number } = {
   issues: [],
   total: 0,
+};
+
+export const EMPTY_GOAL_METRICS: GoalMetrics = {
+  cycle: "",
+  goals: 0,
+  aligned_upper: 0,
+  upper_goals: 0,
+  launched: 0,
+  adopted: 0,
+  achieved_milestones: 0,
+  on_time_milestones: 0,
+  overdue: 0,
+  retro_goals: 0,
+  orphan_goals: 0,
 };

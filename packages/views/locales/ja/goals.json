@@ -136,6 +136,17 @@
     "proposes_pending": "承認待ちに進めることを提案しています",
     "reject": "却下"
   },
+  "stats": {
+    "adopted": "実際に使われた",
+    "adopted_hint": "リリース済みのゴールのうち",
+    "aggregate_note": "チームと期間で集計します。個人別の内訳はなく、それを有効にする設定もありません。",
+    "alignment": "引き継がれた",
+    "launched": "リリース済み",
+    "on_time": "期限内達成",
+    "on_time_hint": "最初に計画した日付で測るため、日付を動かしても遅れは達成になりません",
+    "overdue": "期限超過",
+    "retro": "事後登録"
+  },
   "status": {
     "not_started": "未着手",
     "in_progress": "進行中",

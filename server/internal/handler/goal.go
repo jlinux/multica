@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
@@ -620,6 +621,22 @@ func (h *Handler) DeleteGoal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Deleting an upper tier is restricted; deleting a cycle goal is not.
+	//
+	// Creating and editing stay open to every member, because the plan is
+	// shared and a tier only anyone-but-you can touch stops being shared. But
+	// deleting a direction or a product goal detaches everything aligned to it
+	// across the whole workspace — work other people are in the middle of —
+	// and that is not a thing any one member should be able to do to everybody
+	// else on their own. A cycle goal has nothing below it, so its blast
+	// radius is its own row and its owner keeps it.
+	if goalrules.Level(g.Level) != goalrules.LevelCycle {
+		if _, ok := h.requireWorkspaceRole(w, r, h.resolveWorkspaceID(r),
+			"goal not found", "owner", "admin"); !ok {
+			return
+		}
+	}
+
 	tx, err := h.TxStarter.Begin(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete goal")
@@ -858,4 +875,68 @@ func (h *Handler) resolveProjectRef(w http.ResponseWriter, r *http.Request, wsUU
 		return pgtype.UUID{}, false
 	}
 	return id, true
+}
+
+// GoalMetricsResponse is the workspace's goal-layer summary.
+//
+// There is no per-person field here, and there is no query parameter that
+// would produce one. That is the product decision, not an omission: attainment
+// that can be sliced by person is a performance instrument, and the data
+// stops being true the moment it becomes one — reasons for moving a date turn
+// into whatever is safe to write down, and milestones get set late so they
+// cannot be missed. The numbers are only worth reading while nobody is scored
+// on them.
+type GoalMetricsResponse struct {
+	Cycle string `json:"cycle"`
+	Goals int64  `json:"goals"`
+	// Upper-tier goals something beneath them has picked up, out of all of them.
+	AlignedUpper int64 `json:"aligned_upper"`
+	UpperGoals   int64 `json:"upper_goals"`
+	// The delivery arc. The distance between these two is the finding.
+	Launched int64 `json:"launched"`
+	Adopted  int64 `json:"adopted"`
+	// On time is measured against the FIRST date planned, so a reschedule
+	// cannot launder a slip into a hit.
+	AchievedMilestones int64 `json:"achieved_milestones"`
+	OnTimeMilestones   int64 `json:"on_time_milestones"`
+	// Unfinished and past its date. A queue to work, not a tally to answer for.
+	Overdue int64 `json:"overdue"`
+	// Recorded after the fact. A signal about planning granularity.
+	RetroGoals  int64 `json:"retro_goals"`
+	OrphanGoals int64 `json:"orphan_goals"`
+}
+
+func (h *Handler) GetGoalMetrics(w http.ResponseWriter, r *http.Request) {
+	wsUUID, ok := parseUUIDOrBadRequest(w, h.resolveWorkspaceID(r), "workspace_id")
+	if !ok {
+		return
+	}
+	var cycle pgtype.Text
+	if v := r.URL.Query().Get("cycle"); v != "" {
+		cycle = pgtype.Text{String: v, Valid: true}
+	}
+
+	row, err := h.Queries.GetWorkspaceGoalMetrics(r.Context(), db.GetWorkspaceGoalMetricsParams{
+		WorkspaceID: wsUUID,
+		Cycle:       cycle,
+		Today:       pgtype.Date{Time: time.Now().UTC(), Valid: true},
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load goal metrics")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, GoalMetricsResponse{
+		Cycle:              cycle.String,
+		Goals:              row.GoalCount,
+		AlignedUpper:       row.AlignedUpperCount,
+		UpperGoals:         row.UpperCount,
+		Launched:           row.LaunchedCount,
+		Adopted:            row.AdoptedCount,
+		AchievedMilestones: row.AchievedCount,
+		OnTimeMilestones:   row.OnTimeCount,
+		Overdue:            row.OverdueCount,
+		RetroGoals:         row.RetroGoalCount,
+		OrphanGoals:        row.OrphanCount,
+	})
 }

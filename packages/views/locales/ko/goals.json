@@ -136,6 +136,17 @@
     "proposes_pending": "승인 대기로 넘기자고 제안합니다",
     "reject": "거절"
   },
+  "stats": {
+    "adopted": "실제 사용됨",
+    "adopted_hint": "출시된 목표 중",
+    "aggregate_note": "팀과 기간 단위로 집계합니다. 개인별 분해는 없으며, 그것을 켜는 설정도 없습니다.",
+    "alignment": "이어받음",
+    "launched": "출시됨",
+    "on_time": "기한 내 달성",
+    "on_time_hint": "처음 계획한 날짜로 측정하므로 날짜를 옮겨도 지연이 달성이 되지 않습니다",
+    "overdue": "기한 초과",
+    "retro": "사후 기록"
+  },
   "status": {
     "not_started": "시작 전",
     "in_progress": "진행 중",

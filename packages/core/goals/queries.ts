@@ -32,6 +32,8 @@ export const goalKeys = {
   forIssueAll: (wsId: string) => [...goalKeys.all(wsId), "for-issue"] as const,
   forIssue: (wsId: string, issueId: string) =>
     [...goalKeys.forIssueAll(wsId), issueId] as const,
+  metrics: (wsId: string, cycle?: string) =>
+    [...goalKeys.all(wsId), "metrics", cycle ?? ""] as const,
 };
 
 export const milestoneKeys = {
@@ -150,5 +152,16 @@ export function pendingMilestoneProposalsOptions(wsId: string) {
   return queryOptions({
     queryKey: milestoneKeys.pendingProposals(wsId),
     queryFn: () => api.listPendingMilestoneProposals(),
+  });
+}
+
+/**
+ * Workspace goal metrics. There is no owner parameter here, and adding one
+ * would not be a small change — see the endpoint's own comment.
+ */
+export function goalMetricsOptions(wsId: string, cycle?: string) {
+  return queryOptions({
+    queryKey: goalKeys.metrics(wsId, cycle),
+    queryFn: () => api.getGoalMetrics(cycle),
   });
 }

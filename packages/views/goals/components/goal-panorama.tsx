@@ -9,6 +9,7 @@ import { useT } from "../../i18n";
 import { useWorkspacePaths } from "@multica/core/paths";
 import { rowLinkInteractiveProps, useRowLink } from "../../navigation";
 import { GoalFormDialog } from "./goal-form-dialog";
+import { GoalStatsStrip } from "./goal-stats-strip";
 import { Button } from "@multica/ui/components/ui/button";
 import { Badge } from "@multica/ui/components/ui/badge";
 import { Skeleton } from "@multica/ui/components/ui/skeleton";
@@ -60,9 +61,10 @@ export function GoalPanorama() {
 
   return (
     <>
-      <p className="mb-5 text-label text-muted-foreground">
+      <p className="mb-4 text-label text-muted-foreground">
         {t(($) => $.page.subtitle)}
       </p>
+      <GoalStatsStrip />
       {isPending ? (
           <GoalsSkeleton label={t(($) => $.page.loading)} />
         ) : isError ? (

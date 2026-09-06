@@ -246,6 +246,8 @@ import {
   EMPTY_MILESTONE_RELEASE_LIST,
   EMPTY_GOAL_ISSUE_LIST,
   GoalIssueListSchema,
+  EMPTY_GOAL_METRICS,
+  GoalMetricsSchema,
   GoalListSchema,
   GoalSchema,
   MilestoneDateChangeListSchema,
@@ -261,6 +263,7 @@ import type {
   CreateMilestoneRequest,
   Goal,
   GoalIssue,
+  GoalMetrics,
   GoalListResponse,
   Milestone,
   MilestoneListResponse,
@@ -4778,6 +4781,19 @@ export class ApiClient {
     const raw = await this.fetch<unknown>(`/api/goals?${search}`);
     return parseWithFallback(raw, GoalListSchema, EMPTY_GOAL_LIST, {
       endpoint: "GET /api/goals",
+    });
+  }
+
+  /**
+   * Workspace goal metrics. Aggregate only — the endpoint accepts no
+   * per-person parameter and returns no per-person field.
+   */
+  async getGoalMetrics(cycle?: string): Promise<GoalMetrics> {
+    const search = new URLSearchParams();
+    if (cycle) search.set("cycle", cycle);
+    const raw = await this.fetch<unknown>(`/api/goals/metrics?${search}`);
+    return parseWithFallback(raw, GoalMetricsSchema, EMPTY_GOAL_METRICS, {
+      endpoint: "GET /api/goals/metrics",
     });
   }
 

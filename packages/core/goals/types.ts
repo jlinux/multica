@@ -227,6 +227,27 @@ export interface CreateMilestoneRequest {
   is_retro?: boolean;
 }
 
+/**
+ * Workspace goal metrics.
+ *
+ * There is no per-person field and no parameter that would produce one. That
+ * is the product decision: attainment that can be sliced by person becomes a
+ * performance instrument, and the data stops being true the moment it is one.
+ */
+export interface GoalMetrics {
+  cycle: string;
+  goals: number;
+  aligned_upper: number;
+  upper_goals: number;
+  launched: number;
+  adopted: number;
+  achieved_milestones: number;
+  on_time_milestones: number;
+  overdue: number;
+  retro_goals: number;
+  orphan_goals: number;
+}
+
 export interface GoalListResponse {
   goals: Goal[];
   total: number;

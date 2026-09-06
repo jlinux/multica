@@ -136,6 +136,17 @@
     "proposes_pending": "提议这条可以进入验收",
     "reject": "驳回"
   },
+  "stats": {
+    "adopted": "已有人用",
+    "adopted_hint": "占已上线目标的比例",
+    "aggregate_note": "按团队与周期聚合。不提供按人下钻,也没有可以打开它的开关。",
+    "alignment": "已被承接",
+    "launched": "已上线",
+    "on_time": "按期达成",
+    "on_time_hint": "按最初计划的日期衡量,改期不能把滑期洗成达成",
+    "overdue": "已逾期",
+    "retro": "事后补录"
+  },
   "status": {
     "not_started": "未开始",
     "in_progress": "进行中",

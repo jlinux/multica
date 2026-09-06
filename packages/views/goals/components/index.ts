@@ -1,5 +1,6 @@
 export { GoalsPage } from "./goals-page";
 export { GoalPanorama } from "./goal-panorama";
+export { GoalStatsStrip } from "./goal-stats-strip";
 export { GoalTimeline } from "./goal-timeline";
 export { GoalDetailPage } from "./goal-detail-page";
 export { IssueGoalSection } from "./issue-goal-section";

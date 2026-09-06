@@ -1987,6 +1987,10 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Route("/api/goals", func(r chi.Router) {
 				r.Get("/", h.ListGoals)
 				r.Post("/", h.CreateGoal)
+				// Workspace-level goal metrics. Aggregate only: there is no
+				// per-person dimension in the query, the response or the
+				// parameters, and adding one changes what the feature is for.
+				r.Get("/metrics", h.GetGoalMetrics)
 				r.Route("/{id}", func(r chi.Router) {
 					r.Get("/", h.GetGoal)
 					r.Put("/", h.UpdateGoal)

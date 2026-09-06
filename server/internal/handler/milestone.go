@@ -583,19 +583,40 @@ func (h *Handler) ListMilestoneDateChanges(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusInternalServerError, "failed to list reschedules")
 		return
 	}
+	// Who may read the reasons.
+	//
+	// The dates and the count are the record and everyone sees them: an
+	// overdue milestone must never disappear quietly. The reasons are not the
+	// same thing. They are only worth collecting while the person writing one
+	// is explaining a plan rather than defending a record, and a log the whole
+	// workspace reads is a log that fills with "delay" within a quarter.
+	//
+	// So the reason goes to the two people who need it to act on it — the
+	// goal's owner, and whoever runs the review — and to nobody else. This is
+	// the same decision as the metrics carrying no per-person dimension, and
+	// it is deliberately not configurable.
+	reasonsVisible := h.canReadRescheduleReasons(r, wsUUID, m.GoalID)
+
 	out := make([]map[string]any, len(changes))
 	for i, c := range changes {
-		out[i] = map[string]any{
-			"id":              uuidToString(c.ID),
-			"from_date":       dateToPtr(c.FromDate),
-			"to_date":         dateToPtr(c.ToDate),
-			"reason":          c.Reason,
-			"changed_by_type": c.ChangedByType,
-			"changed_by_id":   uuidToString(c.ChangedByID),
-			"created_at":      timestampToString(c.CreatedAt),
+		row := map[string]any{
+			"id":         uuidToString(c.ID),
+			"from_date":  dateToPtr(c.FromDate),
+			"to_date":    dateToPtr(c.ToDate),
+			"created_at": timestampToString(c.CreatedAt),
 		}
+		if reasonsVisible {
+			row["reason"] = c.Reason
+			row["changed_by_type"] = c.ChangedByType
+			row["changed_by_id"] = uuidToString(c.ChangedByID)
+		}
+		out[i] = row
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"date_changes": out, "total": len(out)})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"date_changes":    out,
+		"total":           len(out),
+		"reasons_visible": reasonsVisible,
+	})
 }
 
 type CreateMilestoneReleaseRequest struct {
@@ -1089,4 +1110,33 @@ func isMilestoneDelayed(m db.Milestone, today time.Time) bool {
 		return false
 	}
 	return goalrules.IsDelayed(goalrules.MilestoneStatus(m.Status), m.PlannedDate.Time, today)
+}
+
+// canReadRescheduleReasons reports whether this caller may see why dates moved.
+//
+// True for the goal's owner and for a workspace owner or admin. Everyone else
+// sees the dates and the count, which is all the record needs to be honest.
+// See the comment at the call site for why this is not a setting.
+func (h *Handler) canReadRescheduleReasons(r *http.Request, wsUUID, goalID pgtype.UUID) bool {
+	workspaceID := h.resolveWorkspaceID(r)
+	userID := requestUserID(r)
+	if workspaceID == "" || userID == "" {
+		return false
+	}
+
+	member, err := h.getWorkspaceMember(r.Context(), userID, workspaceID)
+	if err != nil {
+		return false
+	}
+	if roleAllowed(member.Role, "owner", "admin") {
+		return true
+	}
+
+	goal, err := h.Queries.GetGoalInWorkspace(r.Context(), db.GetGoalInWorkspaceParams{
+		ID: goalID, WorkspaceID: wsUUID,
+	})
+	if err != nil {
+		return false
+	}
+	return goal.OwnerType.String == "member" && uuidToString(goal.OwnerID) == userID
 }

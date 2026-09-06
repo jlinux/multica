@@ -138,6 +138,17 @@
     "proposes_pending": "proposes this is ready for acceptance",
     "reject": "Reject"
   },
+  "stats": {
+    "adopted": "Someone used it",
+    "adopted_hint": "Of the goals that launched",
+    "aggregate_note": "Aggregated by team and period. There is no breakdown by person, and there is no setting that adds one.",
+    "alignment": "Picked up",
+    "launched": "Launched",
+    "on_time": "On time",
+    "on_time_hint": "Measured against the first date planned, so moving a date cannot turn a slip into a hit",
+    "overdue": "Overdue",
+    "retro": "Recorded after"
+  },
   "status": {
     "not_started": "Not started",
     "in_progress": "In progress",
