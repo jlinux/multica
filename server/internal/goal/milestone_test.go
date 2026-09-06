@@ -283,3 +283,32 @@ func TestValidateProposal(t *testing.T) {
 		})
 	}
 }
+
+// A launch is settled by the engineering record, so it may be marked reached
+// without first being handed to a reviewer who does not exist. An adoption
+// milestone may not: skipping the handoff is exactly how the person who built
+// the thing ends up declaring it used.
+func TestOnlyALaunchMayBeReachedWithoutAHandoff(t *testing.T) {
+	if !CanTransitionFor(MilestoneLaunch, MilestonePlanned, MilestoneAchieved) {
+		t.Error("a launch that just shipped must be markable as reached in one step")
+	}
+	if !CanTransitionFor(MilestoneLaunch, MilestoneInProgress, MilestoneAchieved) {
+		t.Error("a launch in progress must be markable as reached")
+	}
+	for _, ty := range []MilestoneType{MilestoneFirstUse, MilestoneNthUse} {
+		if CanTransitionFor(ty, MilestonePlanned, MilestoneAchieved) {
+			t.Errorf("%s must pass through pending_accept; the handoff is the point", ty)
+		}
+		if !CanTransitionFor(ty, MilestonePendingAccept, MilestoneAchieved) {
+			t.Errorf("%s must still be reachable once it has been handed over", ty)
+		}
+	}
+	// The extra edge is additive: nothing the generic machine refused for
+	// another reason becomes legal because the type is a launch.
+	if CanTransitionFor(MilestoneLaunch, MilestoneAchieved, MilestoneInProgress) {
+		t.Error("achieved is terminal for every type")
+	}
+	if CanTransitionFor(MilestoneLaunch, MilestoneCancelled, MilestoneAchieved) {
+		t.Error("a cancelled milestone is not reachable")
+	}
+}

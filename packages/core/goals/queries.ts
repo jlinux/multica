@@ -23,10 +23,15 @@ export const goalKeys = {
     [...goalKeys.all(wsId), "list", filters ?? {}] as const,
   detail: (wsId: string, id: string) =>
     [...goalKeys.all(wsId), "detail", id] as const,
-  issues: (wsId: string, id: string) =>
-    [...goalKeys.all(wsId), "issues", id] as const,
+  // Addressable as a prefix so an issue event can refresh every goal's issue
+  // snapshot without invalidating the whole goal tree. Renaming, closing or
+  // reassigning a linked issue changes rows that live under goalKeys, and
+  // nothing in the issue caches reaches them.
+  issuesAll: (wsId: string) => [...goalKeys.all(wsId), "issues"] as const,
+  issues: (wsId: string, id: string) => [...goalKeys.issuesAll(wsId), id] as const,
+  forIssueAll: (wsId: string) => [...goalKeys.all(wsId), "for-issue"] as const,
   forIssue: (wsId: string, issueId: string) =>
-    [...goalKeys.all(wsId), "for-issue", issueId] as const,
+    [...goalKeys.forIssueAll(wsId), issueId] as const,
 };
 
 export const milestoneKeys = {
@@ -35,8 +40,13 @@ export const milestoneKeys = {
     [...milestoneKeys.all(wsId), "goal", goalId] as const,
   detail: (wsId: string, id: string) =>
     [...milestoneKeys.all(wsId), "detail", id] as const,
+  // The window is part of the key, so the prefix has to be addressable on its
+  // own: an invalidation that spelled the window as two empty strings matched
+  // no query at all, and a rescheduled milestone kept its old date on a chart
+  // whose stale time is infinite.
+  timelines: (wsId: string) => [...milestoneKeys.all(wsId), "timeline"] as const,
   timeline: (wsId: string, from: string, to: string) =>
-    [...milestoneKeys.all(wsId), "timeline", from, to] as const,
+    [...milestoneKeys.timelines(wsId), from, to] as const,
   dateChanges: (wsId: string, id: string) =>
     [...milestoneKeys.all(wsId), "date-changes", id] as const,
   releases: (wsId: string, id: string) =>

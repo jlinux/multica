@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Bot, Check, X } from "lucide-react";
 import { useDecideMilestoneProposal, type MilestoneProposal } from "@multica/core/goals";
 import { useWorkspaceId } from "@multica/core/hooks";
+import { useWorkspacePaths } from "@multica/core/paths";
+import { AppLink } from "../../navigation";
 import { useT } from "../../i18n";
 import { Button } from "@multica/ui/components/ui/button";
 import { Input } from "@multica/ui/components/ui/input";
@@ -36,6 +38,7 @@ export function MilestoneProposalCard({
 }) {
   const { t } = useT("goals");
   const wsId = useWorkspaceId();
+  const paths = useWorkspacePaths();
   const decide = useDecideMilestoneProposal(wsId);
   const [note, setNote] = useState("");
 
@@ -89,13 +92,22 @@ export function MilestoneProposalCard({
       {/* Provenance back into execution. It is what lets a reviewer open the
           run, the diff and the tokens spent behind a one-line assertion that a
           feature is live, instead of taking the sentence on trust. */}
-      {(proposal.source_task_id || proposal.source_issue_id) && (
-        <p className="mt-1 text-micro text-faint-foreground">
-          {proposal.source_task_id ? t(($) => $.proposal.open_run) : null}
-          {proposal.source_task_id && proposal.source_issue_id ? " · " : null}
-          {proposal.source_issue_id ? t(($) => $.proposal.open_issue) : null}
-        </p>
-      )}
+      {proposal.source_issue_id ? (
+        // A link, not a label. The reviewer is being asked to accept a claim on
+        // an agent's word; the run that produced it, its diff and its cost all
+        // live on that issue, and a reference they cannot follow is a reference
+        // that does not help them decide. The run itself has no route of its
+        // own — its execution log is a section of the issue — so one link
+        // reaches both.
+        <AppLink
+          href={paths.issueDetail(proposal.source_issue_id)}
+          className="mt-1 inline-block text-micro text-brand hover:underline"
+        >
+          {proposal.source_task_id
+            ? t(($) => $.proposal.open_run)
+            : t(($) => $.proposal.open_issue)}
+        </AppLink>
+      ) : null}
 
       {pending && (
         <>

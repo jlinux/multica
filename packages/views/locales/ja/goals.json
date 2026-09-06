@@ -9,6 +9,7 @@
     "open": "ゴールを開く"
   },
   "detail": {
+    "achieved_on": "達成",
     "actual": "実績",
     "add_milestone": "マイルストーンを追加",
     "adoption_agent": "エージェントが調べ、根拠を報告します",
@@ -23,6 +24,8 @@
     "due": "期限",
     "issues": "これを届ける作業",
     "issues_hint": "継ぎ目より下:人にもエージェントにも割り当てられます",
+    "mark_achieved": "達成にする",
+    "mark_achieved_hint": "今日を実績日として記録します",
     "milestones": "マイルストーン",
     "milestones_hint": "リリース → 最初の実利用 → 継続利用",
     "no_alignment": "独立",
@@ -35,6 +38,8 @@
     "proposal_pending_other": "{{count}} 件のエージェント提案が承認待ちです",
     "seam_body": "方向性・プロダクト・サイクルの各ゴールは計画の単位です。タスクキューにも「自分の課題」にも現れません。エージェントが着手するのは下に紐づいた課題です。",
     "seam_title": "このゴールはエージェントに割り当てられません",
+    "send_for_acceptance": "承認に回す",
+    "send_for_acceptance_hint": "実際に使われたかを判断する人・仕組みに引き渡します",
     "unassigned": "未割り当て",
     "verifier": "確認者"
   },

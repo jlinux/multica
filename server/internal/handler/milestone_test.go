@@ -338,3 +338,124 @@ func TestMilestoneTimelineNeedsAWindow(t *testing.T) {
 		t.Fatal("a milestone planned inside the window must appear on the timeline")
 	}
 }
+
+// The rule the whole feature rests on has two doors, and both have to be
+// locked. UpdateMilestoneStatus refuses an agent's accept; creation used to
+// let the same agent post an adoption milestone that was already achieved and
+// certify itself in one request.
+func TestAnAgentCannotCreateAnAlreadyAdoptedMilestone(t *testing.T) {
+	if testHandler == nil {
+		t.Skip("no database")
+	}
+	direction := directionGoal(t, "Self-certify direction")
+	product := productGoal(t, "Self-certify product", direction.ID)
+	cycle := newGoal(t, map[string]any{
+		"level": 3, "title": "Self-certify cycle", "parent_goal_id": product.ID,
+	})
+
+	adoption := map[string]any{
+		"type": "first_use", "title": "Claimed as already used",
+		"planned_date": "2026-10-10", "adoption_check": "agent",
+		"status": "achieved", "actual_date": "2026-10-10",
+	}
+	testutil.Call(t, testHandler.CreateMilestone,
+		withURLParam(asAgent(t, "POST", "/api/goals/"+cycle.ID+"/milestones", adoption), "id", cycle.ID)).
+		Want(http.StatusForbidden)
+
+	// The rule is not "agents may not backfill". A launch is settled by the
+	// engineering record, so recording one that already shipped is fine.
+	testutil.Call(t, testHandler.CreateMilestone,
+		withURLParam(asAgent(t, "POST", "/api/goals/"+cycle.ID+"/milestones", map[string]any{
+			"type": "launch", "title": "Shipped last week",
+			"planned_date": "2026-10-03", "status": "achieved", "actual_date": "2026-10-03",
+		}), "id", cycle.ID)).Want(http.StatusCreated)
+
+	// A person may record the adoption they witnessed.
+	testutil.Call(t, testHandler.CreateMilestone,
+		withURLParam(newRequest("POST", "/api/goals/"+cycle.ID+"/milestones", adoption), "id", cycle.ID)).
+		Want(http.StatusCreated)
+}
+
+// The overdue flag is derived on read rather than stored, because the stored
+// column was never written and every badge that depends on it stayed dark.
+func TestOverdueMilestonesReportThemselvesAsDelayed(t *testing.T) {
+	if testHandler == nil {
+		t.Skip("no database")
+	}
+	_, overdue := milestoneFixture(t, "Overdue", map[string]any{
+		"type": "launch", "title": "Was due long ago", "planned_date": "2020-01-01",
+	})
+	if !overdue.IsDelayed {
+		t.Error("a milestone planned in 2020 and never finished must report is_delayed")
+	}
+
+	_, future := milestoneFixture(t, "NotOverdue", map[string]any{
+		"type": "launch", "title": "Due far ahead", "planned_date": "2099-01-01",
+	})
+	if future.IsDelayed {
+		t.Error("a milestone due in 2099 must not report is_delayed")
+	}
+
+	// A finished milestone is never late, however long it took. The flag
+	// describes open work; on the record, lateness is actual vs original date.
+	var achieved MilestoneResponse
+	testutil.Call(t, testHandler.UpdateMilestoneStatus,
+		withURLParam(newRequest("PATCH", "/api/milestones/"+overdue.ID+"/status", map[string]any{
+			"status": "achieved", "actual_date": "2026-01-01",
+		}), "milestoneId", overdue.ID)).Want(http.StatusOK).JSON(&achieved)
+	if achieved.IsDelayed {
+		t.Error("an achieved milestone must not report is_delayed")
+	}
+}
+
+// Two requests that both validated against the same status must not both win.
+func TestMilestoneStatusWriteIsGuardedOnTheStatusItRead(t *testing.T) {
+	if testHandler == nil {
+		t.Skip("no database")
+	}
+	_, m := milestoneFixture(t, "Guarded", map[string]any{
+		"type": "launch", "title": "Ship it", "planned_date": "2026-10-10",
+	})
+
+	testutil.Call(t, testHandler.UpdateMilestoneStatus,
+		withURLParam(newRequest("PATCH", "/api/milestones/"+m.ID+"/status", map[string]any{
+			"status": "achieved", "actual_date": "2026-10-09",
+		}), "milestoneId", m.ID)).Want(http.StatusOK)
+
+	// Achieved is terminal, so the second request is refused by the rules. The
+	// guard matters for the transitions the rules DO allow from a state that
+	// has since moved; this asserts the terminal case, which is the one a
+	// caller is most likely to retry.
+	testutil.Call(t, testHandler.UpdateMilestoneStatus,
+		withURLParam(newRequest("PATCH", "/api/milestones/"+m.ID+"/status", map[string]any{
+			"status": "in_progress",
+		}), "milestoneId", m.ID)).Want(http.StatusBadRequest)
+}
+
+// A goal cannot name a project that is not this workspace's. There are no
+// foreign keys here by house rule, which is precisely why the reference has to
+// be resolved in application code.
+func TestGoalRefusesAProjectFromAnotherWorkspace(t *testing.T) {
+	if testHandler == nil {
+		t.Skip("no database")
+	}
+	direction := directionGoal(t, "Foreign project direction")
+	otherWS := dbfx.Insert(t, "workspace", testutil.Cols{
+		"name": "Other", "slug": "goal-foreign-project-ws", "issue_prefix": "OFP",
+	})
+	foreignProject := dbfx.Insert(t, "project", testutil.Cols{
+		"workspace_id": otherWS, "title": "Foreign product",
+	})
+
+	testutil.Call(t, testHandler.CreateGoal, newRequest("POST", "/api/goals", map[string]any{
+		"level": 2, "title": "Points at another tenant", "kind": "base",
+		"parent_goal_id": direction.ID, "project_id": foreignProject,
+	})).Want(http.StatusBadRequest)
+
+	// A project id that is well-formed but names nothing is refused the same
+	// way; it used to satisfy the required-project rule on its shape alone.
+	testutil.Call(t, testHandler.CreateGoal, newRequest("POST", "/api/goals", map[string]any{
+		"level": 2, "title": "Points at nothing", "kind": "base",
+		"parent_goal_id": direction.ID, "project_id": "00000000-0000-0000-0000-000000000123",
+	})).Want(http.StatusBadRequest)
+}

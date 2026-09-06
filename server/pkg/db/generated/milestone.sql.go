@@ -643,9 +643,13 @@ const listMilestonesForTimeline = `-- name: ListMilestonesForTimeline :many
 SELECT id, workspace_id, goal_id, type, n, title, value_statement, original_planned_date, planned_date, actual_date, status, is_delayed, adoption_check, adoption_config, verifier_type, verifier_id, verifier_label, accepted_by_type, accepted_by_id, accept_note, accepted_at, is_retro, created_by_type, created_by_id, created_at, updated_at, deleted_at FROM milestone
 WHERE workspace_id = $1
   AND deleted_at IS NULL
-  AND planned_date >= $2
-  AND planned_date <= $3
-ORDER BY planned_date
+  -- Filtered on the date the chart actually draws: once a milestone has
+  -- landed, the mark sits on its actual date. Filtering on the plan alone
+  -- dropped a launch planned for 30 June and shipped on 2 July out of a
+  -- window starting 1 July, even though the mark belonged inside it.
+  AND COALESCE(actual_date, planned_date) >= $2
+  AND COALESCE(actual_date, planned_date) <= $3
+ORDER BY COALESCE(actual_date, planned_date)
 `
 
 type ListMilestonesForTimelineParams struct {
@@ -771,12 +775,19 @@ func (q *Queries) ListOverdueMilestones(ctx context.Context, arg ListOverdueMile
 }
 
 const listPendingMilestoneProposals = `-- name: ListPendingMilestoneProposals :many
-SELECT id, workspace_id, milestone_id, proposed_status, proposed_actual_date, evidence, evidence_refs, proposed_by_type, proposed_by_id, source_task_id, source_issue_id, state, decided_by_type, decided_by_id, decided_at, decide_note, created_at FROM milestone_proposal
-WHERE workspace_id = $1 AND state = 'pending'
-ORDER BY created_at DESC
+SELECT p.id, p.workspace_id, p.milestone_id, p.proposed_status, p.proposed_actual_date, p.evidence, p.evidence_refs, p.proposed_by_type, p.proposed_by_id, p.source_task_id, p.source_issue_id, p.state, p.decided_by_type, p.decided_by_id, p.decided_at, p.decide_note, p.created_at FROM milestone_proposal p
+JOIN milestone m ON m.id = p.milestone_id AND m.deleted_at IS NULL
+WHERE p.workspace_id = $1 AND p.state = 'pending'
+ORDER BY p.created_at DESC
 `
 
 // Workspace-wide queue behind the inbox badge.
+//
+// Joined against live milestones. Deleting a goal soft-deletes its milestones
+// but deliberately keeps their proposals as history, and without this join the
+// queue kept offering Accept on claims whose milestone no longer exists — a
+// button that could only ever fail. The rows stay in the table; they are just
+// not work anyone can still do.
 func (q *Queries) ListPendingMilestoneProposals(ctx context.Context, workspaceID pgtype.UUID) ([]MilestoneProposal, error) {
 	rows, err := q.db.Query(ctx, listPendingMilestoneProposals, workspaceID)
 	if err != nil {
@@ -813,6 +824,58 @@ func (q *Queries) ListPendingMilestoneProposals(ctx context.Context, workspaceID
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockMilestoneForUpdate = `-- name: LockMilestoneForUpdate :one
+SELECT id, workspace_id, goal_id, type, n, title, value_statement, original_planned_date, planned_date, actual_date, status, is_delayed, adoption_check, adoption_config, verifier_type, verifier_id, verifier_label, accepted_by_type, accepted_by_id, accept_note, accepted_at, is_retro, created_by_type, created_by_id, created_at, updated_at, deleted_at FROM milestone
+WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL
+FOR UPDATE
+`
+
+type LockMilestoneForUpdateParams struct {
+	ID          pgtype.UUID `json:"id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+}
+
+// Serializes the read-modify-write paths that must not interleave: a
+// reschedule reading the date it is moving from, and a proposal retiring the
+// ones before it. Both computed their input outside the transaction, so two
+// concurrent requests each saw the pre-state and wrote a record of a move that
+// never happened — or left two claims pending on the same milestone, which the
+// queue is supposed to make impossible.
+func (q *Queries) LockMilestoneForUpdate(ctx context.Context, arg LockMilestoneForUpdateParams) (Milestone, error) {
+	row := q.db.QueryRow(ctx, lockMilestoneForUpdate, arg.ID, arg.WorkspaceID)
+	var i Milestone
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.GoalID,
+		&i.Type,
+		&i.N,
+		&i.Title,
+		&i.ValueStatement,
+		&i.OriginalPlannedDate,
+		&i.PlannedDate,
+		&i.ActualDate,
+		&i.Status,
+		&i.IsDelayed,
+		&i.AdoptionCheck,
+		&i.AdoptionConfig,
+		&i.VerifierType,
+		&i.VerifierID,
+		&i.VerifierLabel,
+		&i.AcceptedByType,
+		&i.AcceptedByID,
+		&i.AcceptNote,
+		&i.AcceptedAt,
+		&i.IsRetro,
+		&i.CreatedByType,
+		&i.CreatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
 }
 
 const markMilestoneDelayed = `-- name: MarkMilestoneDelayed :exec
@@ -936,6 +999,7 @@ UPDATE milestone SET
     accepted_at = COALESCE($8, accepted_at),
     updated_at = now()
 WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL
+  AND status = $9
 RETURNING id, workspace_id, goal_id, type, n, title, value_statement, original_planned_date, planned_date, actual_date, status, is_delayed, adoption_check, adoption_config, verifier_type, verifier_id, verifier_label, accepted_by_type, accepted_by_id, accept_note, accepted_at, is_retro, created_by_type, created_by_id, created_at, updated_at, deleted_at
 `
 
@@ -948,8 +1012,16 @@ type UpdateMilestoneStatusParams struct {
 	AcceptedByID   pgtype.UUID        `json:"accepted_by_id"`
 	AcceptNote     pgtype.Text        `json:"accept_note"`
 	AcceptedAt     pgtype.Timestamptz `json:"accepted_at"`
+	ExpectedStatus string             `json:"expected_status"`
 }
 
+// Guarded on the status the caller validated against.
+//
+// Two requests could otherwise both read `pending_accept`, both decide their
+// transition was legal, and then write `achieved` followed by `in_progress` —
+// leaving a terminal state, and keeping the first writer's acceptance metadata
+// attached to a milestone that is no longer accepted. The loser gets no row
+// and is told the milestone moved.
 func (q *Queries) UpdateMilestoneStatus(ctx context.Context, arg UpdateMilestoneStatusParams) (Milestone, error) {
 	row := q.db.QueryRow(ctx, updateMilestoneStatus,
 		arg.ID,
@@ -960,6 +1032,7 @@ func (q *Queries) UpdateMilestoneStatus(ctx context.Context, arg UpdateMilestone
 		arg.AcceptedByID,
 		arg.AcceptNote,
 		arg.AcceptedAt,
+		arg.ExpectedStatus,
 	)
 	var i Milestone
 	err := row.Scan(

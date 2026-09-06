@@ -3,6 +3,7 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { MilestoneProposal } from "@multica/core/goals";
 import { renderWithI18n } from "../../test/i18n";
+import { NavigationProvider, type NavigationAdapter } from "../../navigation";
 import { MilestoneProposalCard } from "./milestone-proposal-card";
 
 const mocks = vi.hoisted(() => ({
@@ -20,6 +21,10 @@ vi.mock("@multica/core/goals", () => ({
 }));
 
 vi.mock("@multica/core/hooks", () => ({ useWorkspaceId: () => "workspace-1" }));
+
+vi.mock("@multica/core/paths", () => ({
+  useWorkspacePaths: () => ({ issueDetail: (id: string) => `/test-workspace/issues/${id}` }),
+}));
 
 function proposal(over: Partial<MilestoneProposal> = {}): MilestoneProposal {
   return {
@@ -43,6 +48,30 @@ function proposal(over: Partial<MilestoneProposal> = {}): MilestoneProposal {
   };
 }
 
+function adapter(): NavigationAdapter {
+  return {
+    push: vi.fn(),
+    replace: vi.fn(),
+    back: vi.fn(),
+    pathname: "/test-workspace/goals/g1",
+    searchParams: new URLSearchParams(),
+    hash: "",
+    getShareableUrl: (p) => p,
+  };
+}
+
+function renderCard(
+  props: { proposal: MilestoneProposal; milestoneId: string; goalId?: string },
+  options?: { locale: "zh-Hans" },
+) {
+  renderWithI18n(
+    <NavigationProvider value={adapter()}>
+      <MilestoneProposalCard {...props} />
+    </NavigationProvider>,
+    options ?? {},
+  );
+}
+
 beforeEach(() => {
   mocks.decide.mockClear();
   mocks.isPending = false;
@@ -54,7 +83,7 @@ describe("MilestoneProposalCard", () => {
     // A reviewer asked to accept something on an agent's word, who has to
     // click first to see the word, starts clicking Accept without clicking the
     // disclosure. The evidence is the whole point of the card.
-    renderWithI18n(<MilestoneProposalCard proposal={proposal()} milestoneId="m1" />);
+    renderCard({ proposal: proposal(), milestoneId: "m1" });
     expect(
       screen.getByText(/Three tenants completed an end-to-end batch import/),
     ).toBeInTheDocument();
@@ -62,7 +91,7 @@ describe("MilestoneProposalCard", () => {
 
   it("says why there is no option to let the agent decide", () => {
     // An absent control explains nothing. This one is absent on purpose.
-    renderWithI18n(<MilestoneProposalCard proposal={proposal()} milestoneId="m1" />);
+    renderCard({ proposal: proposal(), milestoneId: "m1" });
     expect(
       screen.getByText("An agent cannot accept its own proposal. A person decides."),
     ).toBeInTheDocument();
@@ -70,9 +99,7 @@ describe("MilestoneProposalCard", () => {
 
   it("sends the decision with the milestone it belongs to", async () => {
     const user = userEvent.setup();
-    renderWithI18n(
-      <MilestoneProposalCard proposal={proposal()} milestoneId="m1" goalId="g1" />,
-    );
+    renderCard({ proposal: proposal(), milestoneId: "m1", goalId: "g1" });
 
     await user.click(screen.getByRole("button", { name: "Accept" }));
     expect(mocks.decide).toHaveBeenCalledWith(
@@ -82,7 +109,7 @@ describe("MilestoneProposalCard", () => {
 
   it("carries the reviewer's note through to the decision", async () => {
     const user = userEvent.setup();
-    renderWithI18n(<MilestoneProposalCard proposal={proposal()} milestoneId="m1" />);
+    renderCard({ proposal: proposal(), milestoneId: "m1" });
 
     await user.type(screen.getByPlaceholderText("Add a note (optional)"), "Checked with the customer");
     await user.click(screen.getByRole("button", { name: "Reject" }));
@@ -96,25 +123,29 @@ describe("MilestoneProposalCard", () => {
     // reviewer gets a conflict rather than silently overwriting the first.
     // Saying so is what makes that guard visible.
     mocks.isError = true;
-    renderWithI18n(<MilestoneProposalCard proposal={proposal()} milestoneId="m1" />);
+    renderCard({ proposal: proposal(), milestoneId: "m1" });
     expect(screen.getByText("Someone else already decided this one")).toBeInTheDocument();
   });
 
   it("offers no decision on a proposal that is already settled", () => {
-    renderWithI18n(
-      <MilestoneProposalCard
-        proposal={proposal({ state: "superseded" })}
-        milestoneId="m1"
-      />,
-    );
+    renderCard({ proposal: proposal({ state: "superseded" }), milestoneId: "m1" });
     expect(screen.queryByRole("button", { name: "Accept" })).not.toBeInTheDocument();
     expect(screen.getByText("Superseded by a newer proposal")).toBeInTheDocument();
   });
 
+  it("makes the provenance a link the reviewer can follow", () => {
+    // The reviewer is accepting a claim on an agent's word. The run that
+    // produced it, its diff and its cost live on that issue; a reference they
+    // cannot follow does not help them decide.
+    renderCard({ proposal: proposal(), milestoneId: "m1" });
+    expect(screen.getByRole("link", { name: "Open the run behind it" })).toHaveAttribute(
+      "href",
+      "/test-workspace/issues/i1",
+    );
+  });
+
   it("renders localized copy", () => {
-    renderWithI18n(<MilestoneProposalCard proposal={proposal()} milestoneId="m1" />, {
-      locale: "zh-Hans",
-    });
+    renderCard({ proposal: proposal(), milestoneId: "m1" }, { locale: "zh-Hans" });
     expect(screen.getByText("Agent 提议")).toBeInTheDocument();
     expect(screen.getByText("agent 不能确认自己的提议,必须由人裁决。")).toBeInTheDocument();
   });

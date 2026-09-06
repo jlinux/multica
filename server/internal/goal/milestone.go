@@ -89,7 +89,9 @@ var milestoneTransitions = map[MilestoneStatus][]MilestoneStatus{
 	MilestoneCancelled: {},
 }
 
-// CanTransition reports whether a milestone may move from -> to.
+// CanTransition reports whether a milestone may move from -> to, ignoring what
+// kind of milestone it is. Prefer CanTransitionFor, which knows.
+//
 // A no-op move is allowed so that an idempotent retry of the same write does
 // not have to be special-cased by every caller.
 func CanTransition(from, to MilestoneStatus) bool {
@@ -102,6 +104,29 @@ func CanTransition(from, to MilestoneStatus) bool {
 		}
 	}
 	return false
+}
+
+// CanTransitionFor reports whether a milestone of this type may move from -> to.
+//
+// The difference from CanTransition is one edge: a launch may be marked reached
+// directly, without first being handed to anyone.
+//
+// pending_accept exists because the owner has done all they can and the
+// decision now belongs to someone else. For an adoption milestone that someone
+// is real — a verifier, an event threshold, an agent's evidence — and skipping
+// the handoff would let the person who built the thing also declare it used.
+// For a launch there is nobody else: it is settled by the engineering record,
+// and routing it through a handoff state invents a reviewer who does not
+// exist. Requiring it produced a "Mark reached" button that could only ever
+// fail, which is how this edge was found.
+func CanTransitionFor(milestoneType MilestoneType, from, to MilestoneStatus) bool {
+	if to == MilestoneAchieved && !RequiresAcceptance(milestoneType) {
+		switch from {
+		case MilestonePlanned, MilestoneInProgress, MilestonePendingAccept:
+			return true
+		}
+	}
+	return CanTransition(from, to)
 }
 
 // RequiresAcceptance reports whether reaching this stage needs someone other

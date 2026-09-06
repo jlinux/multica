@@ -9,6 +9,7 @@
     "open": "打开目标"
   },
   "detail": {
+    "achieved_on": "已达成",
     "actual": "实际",
     "add_milestone": "添加里程碑",
     "adoption_agent": "由 agent 核查并给出证据",
@@ -23,6 +24,8 @@
     "due": "截止",
     "issues": "承担交付的工作",
     "issues_hint": "接缝以下:可以指派给人或 agent",
+    "mark_achieved": "标记为已达成",
+    "mark_achieved_hint": "以今天作为实际达成日期",
     "milestones": "里程碑",
     "milestones_hint": "上线 → 首次真实使用 → 持续使用",
     "no_alignment": "独立目标",
@@ -35,6 +38,8 @@
     "proposal_pending_other": "{{count}} 条 agent 提议等你裁决",
     "seam_body": "方向、产品目标、阶段目标都是规划单元:它们不进任务队列,也不出现在「我的任务」里。agent 能接手的是下方关联的 issue。",
     "seam_title": "此目标不能指派给 agent",
+    "send_for_acceptance": "交付验收",
+    "send_for_acceptance_hint": "交给判定它是否真的被使用的那个人或那条检查",
     "unassigned": "未指派",
     "verifier": "验收人"
   },

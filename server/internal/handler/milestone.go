@@ -53,7 +53,15 @@ type MilestoneResponse struct {
 	DateChangeCount int64 `json:"date_change_count"`
 }
 
-func milestoneToResponse(m db.Milestone) MilestoneResponse {
+// milestoneToResponse maps one row, deriving the overdue flag against today.
+//
+// is_delayed is derived rather than stored. The column exists and defaults to
+// false, and nothing ever wrote it — so every overdue badge on the detail page
+// and every late marker on the roadmap stayed dark, which is the one state
+// this feature most needs to show. Deriving it on read also means it cannot
+// drift: a milestone that becomes overdue at midnight is overdue on the next
+// read, with no sweeper to schedule, miss, or fall behind.
+func milestoneToResponse(m db.Milestone, today time.Time) MilestoneResponse {
 	var n *int32
 	if m.N.Valid {
 		v := m.N.Int32
@@ -71,7 +79,7 @@ func milestoneToResponse(m db.Milestone) MilestoneResponse {
 		PlannedDate:         dateToPtr(m.PlannedDate),
 		ActualDate:          dateToPtr(m.ActualDate),
 		Status:              m.Status,
-		IsDelayed:           m.IsDelayed,
+		IsDelayed:           isMilestoneDelayed(m, today),
 		AdoptionCheck:       textToPtr(m.AdoptionCheck),
 		VerifierType:        textToPtr(m.VerifierType),
 		VerifierID:          uuidToPtr(m.VerifierID),
@@ -127,10 +135,11 @@ func (h *Handler) ListGoalMilestones(w http.ResponseWriter, r *http.Request) {
 // request: the counter is a badge, and a list that renders without it beats a
 // list that does not render.
 func (h *Handler) milestoneResponses(r *http.Request, wsUUID pgtype.UUID, milestones []db.Milestone) []MilestoneResponse {
+	today := time.Now().UTC()
 	resp := make([]MilestoneResponse, len(milestones))
 	ids := make([]pgtype.UUID, len(milestones))
 	for i, m := range milestones {
-		resp[i] = milestoneToResponse(m)
+		resp[i] = milestoneToResponse(m, today)
 		ids[i] = m.ID
 	}
 	if len(ids) == 0 {
@@ -211,6 +220,25 @@ func (h *Handler) CreateMilestone(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	creatorType, creatorID := h.resolveActor(r, userID, h.resolveWorkspaceID(r))
+
+	// Creation is a second door into `achieved`, and it has to be locked the
+	// same way as the first. Without this an agent could POST a first_use
+	// milestone that is already achieved and certify its own adoption in one
+	// request — exactly what UpdateMilestoneStatus and DecideMilestoneProposal
+	// refuse, reached by a route that never asked.
+	//
+	// The rule is not "agents may not backfill". An agent may record a launch
+	// that already shipped, because a launch is settled by the engineering
+	// record. It may not record that something was used.
+	if status == string(goalrules.MilestoneAchieved) &&
+		goalrules.RequiresAcceptance(in.Type) &&
+		!goalrules.CanDecide(goalrules.ProposalAccepted, goalrules.ActorType(creatorType)) {
+		writeError(w, http.StatusForbidden,
+			"an agent cannot record an adoption milestone as already reached; propose it instead")
+		return
+	}
+
 	var n pgtype.Int4
 	if in.Type == goalrules.MilestoneNthUse {
 		n = pgtype.Int4{Int32: int32(req.N), Valid: true}
@@ -242,7 +270,6 @@ func (h *Handler) CreateMilestone(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	creatorType, creatorID := h.resolveActor(r, userID, h.resolveWorkspaceID(r))
 	creatorUUID, ok := parseUUIDOrBadRequest(w, creatorID, "creator_id")
 	if !ok {
 		return
@@ -271,7 +298,7 @@ func (h *Handler) CreateMilestone(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to create milestone")
 		return
 	}
-	resp := milestoneToResponse(m)
+	resp := milestoneToResponse(m, time.Now().UTC())
 	h.publishGoalChange(r, protocol.EventMilestoneCreated, map[string]any{
 		"goal_id":   uuidToString(g.ID),
 		"milestone": resp,
@@ -379,13 +406,17 @@ func (h *Handler) UpdateMilestoneStatus(w http.ResponseWriter, r *http.Request) 
 
 	from := goalrules.MilestoneStatus(m.Status)
 	to := goalrules.MilestoneStatus(req.Status)
-	if !goalrules.CanTransition(from, to) {
+	if !goalrules.CanTransitionFor(goalrules.MilestoneType(m.Type), from, to) {
 		writeError(w, http.StatusBadRequest, "a milestone at "+m.Status+" cannot move to "+req.Status)
 		return
 	}
 
 	params := db.UpdateMilestoneStatusParams{
 		ID: m.ID, WorkspaceID: wsUUID, Status: req.Status,
+		// The status this transition was validated against. If someone else
+		// moved the milestone in between, no row matches and the write is
+		// refused rather than applied to a state nobody checked.
+		ExpectedStatus: m.Status,
 	}
 	if req.ActualDate != nil && *req.ActualDate != "" {
 		d, err := util.ParseCalendarDate(*req.ActualDate)
@@ -423,7 +454,7 @@ func (h *Handler) UpdateMilestoneStatus(w http.ResponseWriter, r *http.Request) 
 	updated, err := h.Queries.UpdateMilestoneStatus(r.Context(), params)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "milestone not found")
+			writeError(w, http.StatusConflict, "the milestone has moved since this was read")
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "failed to update milestone")
@@ -491,10 +522,26 @@ func (h *Handler) RescheduleMilestone(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback(r.Context())
 	qtx := h.Queries.WithTx(tx)
 
+	// Re-read the date under a row lock. The copy loaded before the
+	// transaction is a snapshot: two concurrent reschedules both saw the
+	// original date and each recorded a move from it, so the log claimed two
+	// moves out of a state only one of them was ever in.
+	locked, err := qtx.LockMilestoneForUpdate(r.Context(), db.LockMilestoneForUpdateParams{
+		ID: m.ID, WorkspaceID: wsUUID,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to reschedule milestone")
+		return
+	}
+	if locked.PlannedDate.Valid && newDate.Time.Equal(locked.PlannedDate.Time) {
+		writeError(w, http.StatusConflict, "the milestone is already planned for that date")
+		return
+	}
+
 	if _, err := qtx.CreateMilestoneDateChange(r.Context(), db.CreateMilestoneDateChangeParams{
 		WorkspaceID:   wsUUID,
 		MilestoneID:   m.ID,
-		FromDate:      m.PlannedDate,
+		FromDate:      locked.PlannedDate,
 		ToDate:        newDate,
 		Reason:        req.Reason,
 		ChangedByType: actorType,
@@ -815,6 +862,17 @@ func (h *Handler) CreateMilestoneProposal(w http.ResponseWriter, r *http.Request
 	defer tx.Rollback(r.Context())
 	qtx := h.Queries.WithTx(tx)
 
+	// Serialize on the milestone. Two proposals arriving together would
+	// otherwise each insert and then retire only what was already committed,
+	// leaving both pending — and the queue is supposed to hold one current
+	// claim so two reviewers cannot accept competing ones.
+	if _, err := qtx.LockMilestoneForUpdate(r.Context(), db.LockMilestoneForUpdateParams{
+		ID: m.ID, WorkspaceID: wsUUID,
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to record the proposal")
+		return
+	}
+
 	p, err := qtx.CreateMilestoneProposal(r.Context(), db.CreateMilestoneProposalParams{
 		WorkspaceID:        wsUUID,
 		MilestoneID:        m.ID,
@@ -981,7 +1039,8 @@ func (h *Handler) DecideMilestoneProposal(w http.ResponseWriter, r *http.Request
 		// The milestone may have moved since the proposal was written. Refusing
 		// here rather than forcing the transition keeps the human's decision
 		// from being applied to a state they were not looking at.
-		if !goalrules.CanTransition(goalrules.MilestoneStatus(m.Status), goalrules.MilestoneStatus(decided.ProposedStatus)) {
+		if !goalrules.CanTransitionFor(goalrules.MilestoneType(m.Type),
+			goalrules.MilestoneStatus(m.Status), goalrules.MilestoneStatus(decided.ProposedStatus)) {
 			writeError(w, http.StatusConflict,
 				"the milestone has moved to "+m.Status+" since this was proposed")
 			return
@@ -990,6 +1049,7 @@ func (h *Handler) DecideMilestoneProposal(w http.ResponseWriter, r *http.Request
 			ID:             m.ID,
 			WorkspaceID:    wsUUID,
 			Status:         decided.ProposedStatus,
+			ExpectedStatus: m.Status,
 			ActualDate:     decided.ProposedActualDate,
 			AcceptedByType: pgtype.Text{String: deciderType, Valid: true},
 			AcceptedByID:   deciderUUID,
@@ -1019,4 +1079,14 @@ func (h *Handler) DecideMilestoneProposal(w http.ResponseWriter, r *http.Request
 		resp["milestone"] = h.milestoneResponses(r, wsUUID, []db.Milestone{milestone})[0]
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// isMilestoneDelayed reports whether an unfinished milestone has passed its
+// planned date. The rule itself lives in internal/goal, which owns it for the
+// client and the server alike; this only adapts the row's column types.
+func isMilestoneDelayed(m db.Milestone, today time.Time) bool {
+	if !m.PlannedDate.Valid {
+		return false
+	}
+	return goalrules.IsDelayed(goalrules.MilestoneStatus(m.Status), m.PlannedDate.Time, today)
 }

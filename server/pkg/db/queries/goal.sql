@@ -85,7 +85,20 @@ WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL;
 -- Explicit dependent cleanup: no foreign keys by house rule, so orphaning the
 -- children of a deleted goal is the application's job, in the same transaction
 -- as the delete. They become unaligned goals rather than vanishing.
-UPDATE goal SET parent_goal_id = NULL, updated_at = now()
+--
+-- The reason is written here, not left empty, because an unaligned goal with
+-- no reason is a shape the rules refuse. Clearing the parent alone produced a
+-- goal that rendered fine and then failed validation on the owner's next edit,
+-- with an error about a field they never touched. Only goals that had no
+-- reason of their own are given one, so a goal that was deliberately unaligned
+-- before, and later re-aligned, keeps what its owner wrote.
+UPDATE goal SET
+    parent_goal_id = NULL,
+    orphan_reason = CASE
+        WHEN orphan_reason = '' THEN sqlc.arg('detached_reason')::text
+        ELSE orphan_reason
+    END,
+    updated_at = now()
 WHERE workspace_id = $1 AND parent_goal_id = $2 AND deleted_at IS NULL;
 
 -- name: DetachGoalContinuations :exec

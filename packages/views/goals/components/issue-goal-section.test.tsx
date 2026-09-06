@@ -29,7 +29,10 @@ vi.mock("@multica/core/goals", () => ({
 vi.mock("@multica/core/hooks", () => ({ useWorkspaceId: () => "workspace-1" }));
 
 vi.mock("@multica/core/paths", () => ({
-  useWorkspacePaths: () => ({ goalDetail: (id: string) => `/test-workspace/goals/${id}` }),
+  useWorkspacePaths: () => ({
+    goalDetail: (id: string) => `/test-workspace/goals/${id}`,
+    issueDetail: (id: string) => `/test-workspace/issues/${id}`,
+  }),
 }));
 
 function goal(over: Partial<Goal> & { id: string }): Goal {

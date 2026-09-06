@@ -9,6 +9,7 @@
     "open": "Open goal"
   },
   "detail": {
+    "achieved_on": "Reached",
     "actual": "Landed",
     "add_milestone": "Add a milestone",
     "adoption_agent": "An agent checks and reports evidence",
@@ -23,6 +24,8 @@
     "due": "Due",
     "issues": "Work delivering this",
     "issues_hint": "Below the seam: assignable to a person or an agent",
+    "mark_achieved": "Mark reached",
+    "mark_achieved_hint": "Records today as the date it happened",
     "milestones": "Milestones",
     "milestones_hint": "Launch, then first real use, then continued use",
     "no_alignment": "Stands alone",
@@ -36,6 +39,8 @@
     "proposal_pending_other": "{{count}} agent proposals waiting on you",
     "seam_body": "Direction, product and cycle goals are planning units: they never enter the task queue and never appear in My Issues. The work an agent picks up is an issue linked below.",
     "seam_title": "This goal cannot be assigned to an agent",
+    "send_for_acceptance": "Hand over for acceptance",
+    "send_for_acceptance_hint": "Moves it to the person or check that decides whether it was really used",
     "unassigned": "Unassigned",
     "verifier": "Verified by"
   },

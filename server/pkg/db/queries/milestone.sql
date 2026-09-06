@@ -29,9 +29,13 @@ ORDER BY planned_date, type;
 SELECT * FROM milestone
 WHERE workspace_id = $1
   AND deleted_at IS NULL
-  AND planned_date >= sqlc.arg('from_date')
-  AND planned_date <= sqlc.arg('to_date')
-ORDER BY planned_date;
+  -- Filtered on the date the chart actually draws: once a milestone has
+  -- landed, the mark sits on its actual date. Filtering on the plan alone
+  -- dropped a launch planned for 30 June and shipped on 2 July out of a
+  -- window starting 1 July, even though the mark belonged inside it.
+  AND COALESCE(actual_date, planned_date) >= sqlc.arg('from_date')
+  AND COALESCE(actual_date, planned_date) <= sqlc.arg('to_date')
+ORDER BY COALESCE(actual_date, planned_date);
 
 -- name: ListOverdueMilestones :many
 -- Drives the sweep that sets is_delayed and the notices that follow it.
@@ -45,6 +49,13 @@ WHERE workspace_id = $1
 ORDER BY planned_date;
 
 -- name: UpdateMilestoneStatus :one
+-- Guarded on the status the caller validated against.
+--
+-- Two requests could otherwise both read `pending_accept`, both decide their
+-- transition was legal, and then write `achieved` followed by `in_progress` —
+-- leaving a terminal state, and keeping the first writer's acceptance metadata
+-- attached to a milestone that is no longer accepted. The loser gets no row
+-- and is told the milestone moved.
 UPDATE milestone SET
     status = sqlc.arg('status'),
     actual_date = COALESCE(sqlc.narg('actual_date'), actual_date),
@@ -54,11 +65,23 @@ UPDATE milestone SET
     accepted_at = COALESCE(sqlc.narg('accepted_at'), accepted_at),
     updated_at = now()
 WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL
+  AND status = sqlc.arg('expected_status')
 RETURNING *;
 
 -- name: MarkMilestoneDelayed :exec
 UPDATE milestone SET is_delayed = sqlc.arg('is_delayed'), updated_at = now()
 WHERE id = $1 AND workspace_id = $2 AND is_delayed <> sqlc.arg('is_delayed');
+
+-- name: LockMilestoneForUpdate :one
+-- Serializes the read-modify-write paths that must not interleave: a
+-- reschedule reading the date it is moving from, and a proposal retiring the
+-- ones before it. Both computed their input outside the transaction, so two
+-- concurrent requests each saw the pre-state and wrote a record of a move that
+-- never happened — or left two claims pending on the same milestone, which the
+-- queue is supposed to make impossible.
+SELECT * FROM milestone
+WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL
+FOR UPDATE;
 
 -- name: RescheduleMilestone :one
 -- Moves the date only. original_planned_date is untouched by construction, so
@@ -142,9 +165,16 @@ RETURNING *;
 
 -- name: ListPendingMilestoneProposals :many
 -- Workspace-wide queue behind the inbox badge.
-SELECT * FROM milestone_proposal
-WHERE workspace_id = $1 AND state = 'pending'
-ORDER BY created_at DESC;
+--
+-- Joined against live milestones. Deleting a goal soft-deletes its milestones
+-- but deliberately keeps their proposals as history, and without this join the
+-- queue kept offering Accept on claims whose milestone no longer exists — a
+-- button that could only ever fail. The rows stay in the table; they are just
+-- not work anyone can still do.
+SELECT p.* FROM milestone_proposal p
+JOIN milestone m ON m.id = p.milestone_id AND m.deleted_at IS NULL
+WHERE p.workspace_id = $1 AND p.state = 'pending'
+ORDER BY p.created_at DESC;
 
 -- name: ListMilestoneProposals :many
 -- One milestone's full proposal history, decided ones included: what was

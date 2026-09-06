@@ -9,6 +9,7 @@
     "open": "목표 열기"
   },
   "detail": {
+    "achieved_on": "달성",
     "actual": "실제",
     "add_milestone": "마일스톤 추가",
     "adoption_agent": "에이전트가 조사해 근거를 보고합니다",
@@ -23,6 +24,8 @@
     "due": "기한",
     "issues": "이를 전달하는 작업",
     "issues_hint": "이음매 아래: 사람이나 에이전트에게 배정할 수 있습니다",
+    "mark_achieved": "달성으로 표시",
+    "mark_achieved_hint": "오늘을 실제 날짜로 기록합니다",
     "milestones": "마일스톤",
     "milestones_hint": "출시 → 첫 실사용 → 지속 사용",
     "no_alignment": "독립",
@@ -35,6 +38,8 @@
     "proposal_pending_other": "{{count}}건의 에이전트 제안이 대기 중입니다",
     "seam_body": "방향·제품·주기 목표는 계획 단위입니다. 작업 대기열에도, 내 이슈에도 나타나지 않습니다. 에이전트가 맡는 것은 아래에 연결된 이슈입니다.",
     "seam_title": "이 목표는 에이전트에게 배정할 수 없습니다",
+    "send_for_acceptance": "승인으로 넘기기",
+    "send_for_acceptance_hint": "실제 사용 여부를 판단하는 사람이나 검사로 넘깁니다",
     "unassigned": "미지정",
     "verifier": "확인자"
   },

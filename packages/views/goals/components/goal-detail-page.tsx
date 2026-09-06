@@ -7,6 +7,7 @@ import {
   Ban,
   CircleCheck,
   CalendarClock,
+  CircleCheckBig,
   CircleDashed,
   Clock,
   Plus,
@@ -18,6 +19,7 @@ import {
   goalListOptions,
   goalMilestonesOptions,
   pendingMilestoneProposalsOptions,
+  useUpdateMilestoneStatus,
   type MilestoneProposal,
   type Goal,
   type GoalIssue,
@@ -405,6 +407,13 @@ function MilestoneRow({
   onReschedule: () => void;
 }) {
   const { t } = useT("goals");
+  const wsId = useWorkspaceId();
+  const updateStatus = useUpdateMilestoneStatus(wsId);
+  // Mirrors the server rule (internal/goal.CanTransitionFor). A launch needs no
+  // handoff; an adoption milestone only becomes reachable once it has had one.
+  const open = milestone.status !== "achieved" && milestone.status !== "cancelled";
+  const canReachDirectly =
+    !milestone.requires_acceptance || milestone.status === "pending_accept";
   const typeKey =
     milestone.type in MILESTONE_ORDER
       ? (milestone.type as keyof typeof MILESTONE_ORDER)
@@ -477,6 +486,53 @@ function MilestoneRow({
             >
               <CalendarClock className="size-3" aria-hidden />
               {t(($) => $.form.reschedule)}
+            </button>
+          )}
+          {/* A team with no agents still has to be able to finish a milestone;
+              without this the only route to `achieved` was accepting an agent's
+              proposal, which made the whole arc depend on having agents.
+              Which action is offered follows the rule, rather than offering one
+              button that fails for half the milestones: a launch is settled by
+              the engineering record and can be marked reached outright, while
+              an adoption milestone has to be handed to whoever decides it was
+              really used. The date is today, not a picker — the common case is
+              recording something that just happened, and a backdated one is a
+              reschedule followed by this. */}
+          {open && canReachDirectly && (
+            <button
+              type="button"
+              disabled={updateStatus.isPending}
+              title={t(($) => $.detail.mark_achieved_hint)}
+              onClick={() =>
+                updateStatus.mutate({
+                  id: milestone.id,
+                  goalId,
+                  status: "achieved",
+                  actual_date: new Date().toISOString().slice(0, 10),
+                })
+              }
+              className="inline-flex items-center gap-1 rounded text-success hover:underline disabled:opacity-50"
+            >
+              <CircleCheckBig className="size-3" aria-hidden />
+              {t(($) => $.detail.mark_achieved)}
+            </button>
+          )}
+          {open && !canReachDirectly && milestone.status !== "pending_accept" && (
+            <button
+              type="button"
+              disabled={updateStatus.isPending}
+              title={t(($) => $.detail.send_for_acceptance_hint)}
+              onClick={() =>
+                updateStatus.mutate({
+                  id: milestone.id,
+                  goalId,
+                  status: "pending_accept",
+                })
+              }
+              className="inline-flex items-center gap-1 rounded text-brand hover:underline disabled:opacity-50"
+            >
+              <CircleCheckBig className="size-3" aria-hidden />
+              {t(($) => $.detail.send_for_acceptance)}
             </button>
           )}
           {milestone.verifier_label ? (

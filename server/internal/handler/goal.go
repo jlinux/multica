@@ -316,7 +316,7 @@ func (h *Handler) CreateGoal(w http.ResponseWriter, r *http.Request) {
 
 	var projectID pgtype.UUID
 	if in.HasProject {
-		id, ok := parseUUIDOrBadRequest(w, *req.ProjectID, "project_id")
+		id, ok := h.resolveProjectRef(w, r, wsUUID, *req.ProjectID)
 		if !ok {
 			return
 		}
@@ -551,7 +551,7 @@ func (h *Handler) UpdateGoal(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if req.ProjectID != nil && *req.ProjectID != "" {
-		id, ok := parseUUIDOrBadRequest(w, *req.ProjectID, "project_id")
+		id, ok := h.resolveProjectRef(w, r, wsUUID, *req.ProjectID)
 		if !ok {
 			return
 		}
@@ -629,7 +629,11 @@ func (h *Handler) DeleteGoal(w http.ResponseWriter, r *http.Request) {
 	qtx := h.Queries.WithTx(tx)
 
 	if err := qtx.DetachGoalChildren(r.Context(), db.DetachGoalChildrenParams{
-		WorkspaceID: wsUUID, ParentGoalID: g.ID,
+		WorkspaceID:  wsUUID,
+		ParentGoalID: g.ID,
+		// A goal that loses its parent must still be a shape the rules accept,
+		// or its owner's next edit fails on a field they never touched.
+		DetachedReason: "The goal this aligned to was deleted.",
 	}); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to detach aligned goals")
 		return
@@ -826,4 +830,32 @@ func (h *Handler) publishGoalChange(r *http.Request, eventType string, payload m
 	}
 	actorType, actorID := h.resolveActor(r, requestUserID(r), workspaceID)
 	h.publish(eventType, workspaceID, actorType, actorID, payload)
+}
+
+// resolveProjectRef loads the project a goal names, scoped to the caller's
+// workspace.
+//
+// Parsing the id was not enough. Any syntactically valid UUID satisfied the
+// "a product goal must name a project" rule, so a goal could pass validation
+// while pointing at a project that does not exist — or one belonging to
+// another workspace — and then render under an unresolved product on the
+// timeline. There are no foreign keys here by house rule, which is exactly why
+// the reference has to be resolved in application code.
+func (h *Handler) resolveProjectRef(w http.ResponseWriter, r *http.Request, wsUUID pgtype.UUID, raw string) (pgtype.UUID, bool) {
+	id, ok := parseUUIDOrBadRequest(w, raw, "project_id")
+	if !ok {
+		return pgtype.UUID{}, false
+	}
+	if _, err := h.Queries.GetProjectInWorkspace(r.Context(), db.GetProjectInWorkspaceParams{
+		ID:          id,
+		WorkspaceID: wsUUID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusBadRequest, "project_id does not name a project in this workspace")
+		} else {
+			writeError(w, http.StatusInternalServerError, "failed to load project")
+		}
+		return pgtype.UUID{}, false
+	}
+	return id, true
 }

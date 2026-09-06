@@ -123,6 +123,7 @@ export function useCreateMilestone(wsId: string) {
       api.createMilestone(goalId, data),
     onSettled: (_data, _err, vars) => {
       qc.invalidateQueries({ queryKey: milestoneKeys.forGoal(wsId, vars.goalId) });
+      qc.invalidateQueries({ queryKey: milestoneKeys.timelines(wsId) });
     },
   });
 }
@@ -149,6 +150,9 @@ export function useUpdateMilestoneStatus(wsId: string) {
     onSettled: (_data, _err, vars) => {
       qc.invalidateQueries({ queryKey: milestoneKeys.detail(wsId, vars.id) });
       qc.invalidateQueries({ queryKey: milestoneKeys.forGoal(wsId, vars.goalId) });
+      // Reaching a stage moves the mark on the chart, which is drawn from the
+      // actual date once there is one.
+      qc.invalidateQueries({ queryKey: milestoneKeys.timelines(wsId) });
     },
   });
 }
@@ -175,7 +179,7 @@ export function useRescheduleMilestone(wsId: string) {
       qc.invalidateQueries({ queryKey: milestoneKeys.detail(wsId, vars.id) });
       qc.invalidateQueries({ queryKey: milestoneKeys.dateChanges(wsId, vars.id) });
       qc.invalidateQueries({ queryKey: milestoneKeys.forGoal(wsId, vars.goalId) });
-      qc.invalidateQueries({ queryKey: milestoneKeys.timeline(wsId, "", "") });
+      qc.invalidateQueries({ queryKey: milestoneKeys.timelines(wsId) });
     },
   });
 }
@@ -229,6 +233,7 @@ export function useDecideMilestoneProposal(wsId: string) {
       qc.invalidateQueries({ queryKey: milestoneKeys.proposals(wsId, vars.milestoneId) });
       qc.invalidateQueries({ queryKey: milestoneKeys.pendingProposals(wsId) });
       qc.invalidateQueries({ queryKey: milestoneKeys.detail(wsId, vars.milestoneId) });
+      qc.invalidateQueries({ queryKey: milestoneKeys.timelines(wsId) });
       if (vars.goalId) {
         qc.invalidateQueries({ queryKey: milestoneKeys.forGoal(wsId, vars.goalId) });
       }

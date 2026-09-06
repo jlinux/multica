@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type {
   Goal,
   GoalIssue,
@@ -16,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   issues: [] as GoalIssue[],
   allGoals: [] as Goal[],
   proposals: [] as MilestoneProposal[],
+  updateStatus: vi.fn(),
   isPending: false,
   isError: false,
 }));
@@ -40,6 +42,7 @@ vi.mock("@multica/core/goals", () => ({
   goalListOptions: () => ({ queryKey: ["goals"] }),
   pendingMilestoneProposalsOptions: () => ({ queryKey: ["proposals", "pending"] }),
   useDecideMilestoneProposal: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useUpdateMilestoneStatus: () => ({ mutate: mocks.updateStatus, isPending: false, isError: false }),
 }));
 
 vi.mock("@multica/core/hooks", () => ({ useWorkspaceId: () => "workspace-1" }));
@@ -136,6 +139,7 @@ beforeEach(() => {
   mocks.issues = [];
   mocks.allGoals = [];
   mocks.proposals = [];
+  mocks.updateStatus.mockClear();
   mocks.isPending = false;
   mocks.isError = false;
 });
@@ -210,6 +214,78 @@ describe("GoalDetailPage", () => {
     ];
     renderDetail();
     expect(screen.getByText("Moved 2 times")).toBeInTheDocument();
+  });
+
+  it("lets a person finish a milestone without an agent in the loop", async () => {
+    // Before this the only route to `achieved` was accepting an agent's
+    // proposal, which made the whole three-stage arc depend on having agents.
+    const user = userEvent.setup();
+    mocks.milestones = [
+      milestone({ id: "m1", title: "Ship it", planned_date: "2026-10-10" }),
+    ];
+    renderDetail();
+
+    await user.click(screen.getByRole("button", { name: "Mark reached" }));
+    expect(mocks.updateStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "m1", goalId: "c1", status: "achieved" }),
+    );
+    // Today, not a blank: the common case is recording something that just
+    // happened, and a backdated one is a reschedule followed by this.
+    const call = mocks.updateStatus.mock.calls[0]?.[0] as { actual_date?: string };
+    expect(call?.actual_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("offers a handoff, not a finish, on a milestone that needs acceptance", async () => {
+    // One button that fails for half the milestones is worse than two that
+    // each say what they do. An adoption claim has to reach whoever decides it.
+    const user = userEvent.setup();
+    mocks.milestones = [
+      milestone({
+        id: "m1",
+        type: "first_use",
+        title: "First real use",
+        planned_date: "2026-10-10",
+        adoption_check: "verifier",
+        requires_acceptance: true,
+      }),
+    ];
+    renderDetail();
+
+    expect(screen.queryByRole("button", { name: "Mark reached" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Hand over for acceptance" }));
+    expect(mocks.updateStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "m1", status: "pending_accept" }),
+    );
+  });
+
+  it("offers the finish once an adoption milestone has been handed over", () => {
+    mocks.milestones = [
+      milestone({
+        id: "m1",
+        type: "first_use",
+        title: "First real use",
+        status: "pending_accept",
+        planned_date: "2026-10-10",
+        adoption_check: "verifier",
+        requires_acceptance: true,
+      }),
+    ];
+    renderDetail();
+    expect(screen.getByRole("button", { name: "Mark reached" })).toBeInTheDocument();
+  });
+
+  it("offers no finish action on a milestone already reached", () => {
+    mocks.milestones = [
+      milestone({
+        id: "m1",
+        title: "Ship it",
+        status: "achieved",
+        planned_date: "2026-10-10",
+        actual_date: "2026-10-09",
+      }),
+    ];
+    renderDetail();
+    expect(screen.queryByRole("button", { name: "Mark reached" })).not.toBeInTheDocument();
   });
 
   it("guides a goal with no milestones toward a launch date", () => {

@@ -150,20 +150,34 @@ func (q *Queries) DeleteGoalIssueLinksForGoal(ctx context.Context, arg DeleteGoa
 }
 
 const detachGoalChildren = `-- name: DetachGoalChildren :exec
-UPDATE goal SET parent_goal_id = NULL, updated_at = now()
+UPDATE goal SET
+    parent_goal_id = NULL,
+    orphan_reason = CASE
+        WHEN orphan_reason = '' THEN $3::text
+        ELSE orphan_reason
+    END,
+    updated_at = now()
 WHERE workspace_id = $1 AND parent_goal_id = $2 AND deleted_at IS NULL
 `
 
 type DetachGoalChildrenParams struct {
-	WorkspaceID  pgtype.UUID `json:"workspace_id"`
-	ParentGoalID pgtype.UUID `json:"parent_goal_id"`
+	WorkspaceID    pgtype.UUID `json:"workspace_id"`
+	ParentGoalID   pgtype.UUID `json:"parent_goal_id"`
+	DetachedReason string      `json:"detached_reason"`
 }
 
 // Explicit dependent cleanup: no foreign keys by house rule, so orphaning the
 // children of a deleted goal is the application's job, in the same transaction
 // as the delete. They become unaligned goals rather than vanishing.
+//
+// The reason is written here, not left empty, because an unaligned goal with
+// no reason is a shape the rules refuse. Clearing the parent alone produced a
+// goal that rendered fine and then failed validation on the owner's next edit,
+// with an error about a field they never touched. Only goals that had no
+// reason of their own are given one, so a goal that was deliberately unaligned
+// before, and later re-aligned, keeps what its owner wrote.
 func (q *Queries) DetachGoalChildren(ctx context.Context, arg DetachGoalChildrenParams) error {
-	_, err := q.db.Exec(ctx, detachGoalChildren, arg.WorkspaceID, arg.ParentGoalID)
+	_, err := q.db.Exec(ctx, detachGoalChildren, arg.WorkspaceID, arg.ParentGoalID, arg.DetachedReason)
 	return err
 }
 

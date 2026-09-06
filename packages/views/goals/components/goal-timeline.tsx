@@ -29,6 +29,7 @@ import {
   parseCalendarDate,
   positionOf,
   shippedWithoutUseDays,
+  startOfUTCDay,
   type TimelineWindow,
 } from "../timeline-window";
 
@@ -538,11 +539,6 @@ function TimelineSkeleton({ label }: { label: string }) {
       ))}
     </div>
   );
-}
-
-function startOfUTCDay(at: number): number {
-  const date = new Date(at);
-  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }
 
 function toCalendarDate(at: number): string {

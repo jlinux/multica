@@ -640,6 +640,23 @@ export async function handleInboxNew(
  * new WSClient instance is detected (workspace switch) to recover events
  * missed while disconnected.
  */
+/**
+ * Refreshes the issue rows a goal renders under its own keys.
+ *
+ * A goal's "work delivering this" list is a summary the server built, not a
+ * view of the issue caches, so renaming, closing, reassigning or deleting a
+ * linked issue leaves it showing what was true when the page loaded. The
+ * global staleTime is infinite, so a remount does not recover it either.
+ *
+ * Narrowed to the issue sub-trees rather than the whole goal tree: issue
+ * events are frequent, and refetching every goal, milestone and timeline on
+ * each status flip would be a fanout nobody asked for.
+ */
+function invalidateGoalIssueSnapshots(qc: QueryClient, wsId: string): void {
+  qc.invalidateQueries({ queryKey: goalKeys.issuesAll(wsId) });
+  qc.invalidateQueries({ queryKey: goalKeys.forIssueAll(wsId) });
+}
+
 function invalidateWorkspaceScopedQueries(qc: QueryClient): void {
   const wsId = getCurrentWsId();
   if (wsId) {
@@ -1032,6 +1049,7 @@ export function useRealtimeSync(
         if (issue.status) {
           onInboxIssueStatusChanged(qc, wsId, issue.id, issue.status);
         }
+        invalidateGoalIssueSnapshots(qc, wsId);
       }
     });
 
@@ -1049,6 +1067,7 @@ export function useRealtimeSync(
       if (wsId) {
         onIssueDeleted(qc, wsId, issue_id);
         onInboxIssueDeleted(qc, wsId, issue_id);
+        invalidateGoalIssueSnapshots(qc, wsId);
       }
     });
 

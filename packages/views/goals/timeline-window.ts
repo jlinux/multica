@@ -135,8 +135,13 @@ export function effectiveDate(milestone: MilestoneLike): number | null {
  */
 export function shippedWithoutUseDays(
   milestones: MilestoneLike[],
-  today: number,
+  now: number,
 ): number | null {
+  // Normalized first. Callers pass Date.now(), which is an instant, while
+  // every date here is UTC midnight. Comparing the two directly made a
+  // milestone due today read as already past from one minute after midnight,
+  // and rounded the day count up every afternoon.
+  const today = startOfUTCDay(now);
   const launch = milestones.find((m) => m.type === "launch" && m.status === "achieved");
   if (!launch) return null;
   const launchedAt = parseCalendarDate(launch.actual_date);
@@ -156,4 +161,10 @@ export function shippedWithoutUseDays(
 
   const days = daysBetween(launchedAt, today);
   return days > 0 ? days : null;
+}
+
+/** The UTC-midnight day an instant falls in. */
+export function startOfUTCDay(at: number): number {
+  const date = new Date(at);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }
