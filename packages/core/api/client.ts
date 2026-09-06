@@ -238,6 +238,35 @@ import { createRequestId, createSafeId } from "../utils";
 import { getCurrentSlug } from "../platform/workspace-storage";
 import { parseWithFallback } from "./schema";
 import {
+  EMPTY_GOAL,
+  EMPTY_GOAL_LIST,
+  EMPTY_MILESTONE,
+  EMPTY_MILESTONE_LIST,
+  EMPTY_MILESTONE_PROPOSAL_LIST,
+  EMPTY_MILESTONE_RELEASE_LIST,
+  GoalIssueIDsSchema,
+  GoalListSchema,
+  GoalSchema,
+  MilestoneDateChangeListSchema,
+  MilestoneListSchema,
+  MilestoneProposalListSchema,
+  MilestoneProposalSchema,
+  MilestoneReleaseListSchema,
+  MilestoneReleaseSchema,
+  MilestoneSchema,
+} from "../goals/schemas";
+import type {
+  CreateGoalRequest,
+  CreateMilestoneRequest,
+  Goal,
+  GoalListResponse,
+  Milestone,
+  MilestoneListResponse,
+  MilestoneProposal,
+  MilestoneRelease,
+  UpdateGoalRequest,
+} from "../goals/types";
+import {
   AgentTaskListSchema,
   AttachmentResponseSchema,
   CancelTaskResponseSchema,
@@ -4721,5 +4750,253 @@ export class ApiClient {
       EMPTY_REDEEM_TELEGRAM_BINDING_TOKEN_RESPONSE,
       { endpoint: "POST /api/telegram/binding/redeem" },
     );
+  }
+
+  // ---------------------------------------------------------------------
+  // Goal layer. Every response goes through a lenient schema: an installed
+  // desktop client talks to backends newer than itself, and a drifted field
+  // must degrade one row rather than blank the panorama.
+  // ---------------------------------------------------------------------
+
+  async listGoals(params?: {
+    level?: number;
+    status?: string;
+    project_id?: string;
+    owner_id?: string;
+    parent_goal_id?: string;
+    orphan_only?: boolean;
+  }): Promise<GoalListResponse> {
+    const search = new URLSearchParams();
+    if (params?.level !== undefined) search.set("level", String(params.level));
+    if (params?.status) search.set("status", params.status);
+    if (params?.project_id) search.set("project_id", params.project_id);
+    if (params?.owner_id) search.set("owner_id", params.owner_id);
+    if (params?.parent_goal_id) search.set("parent_goal_id", params.parent_goal_id);
+    if (params?.orphan_only) search.set("orphan_only", "true");
+    const raw = await this.fetch<unknown>(`/api/goals?${search}`);
+    return parseWithFallback(raw, GoalListSchema, EMPTY_GOAL_LIST, {
+      endpoint: "GET /api/goals",
+    });
+  }
+
+  async getGoal(id: string): Promise<Goal> {
+    const raw = await this.fetch<unknown>(`/api/goals/${id}`);
+    return parseWithFallback(raw, GoalSchema, EMPTY_GOAL, {
+      endpoint: "GET /api/goals/:id",
+    });
+  }
+
+  async createGoal(data: CreateGoalRequest): Promise<Goal> {
+    const raw = await this.fetch<unknown>("/api/goals", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    return parseWithFallback(raw, GoalSchema, EMPTY_GOAL, {
+      endpoint: "POST /api/goals",
+    });
+  }
+
+  async updateGoal(id: string, data: UpdateGoalRequest): Promise<Goal> {
+    const raw = await this.fetch<unknown>(`/api/goals/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+    return parseWithFallback(raw, GoalSchema, EMPTY_GOAL, {
+      endpoint: "PUT /api/goals/:id",
+    });
+  }
+
+  async deleteGoal(id: string): Promise<void> {
+    await this.fetch(`/api/goals/${id}`, { method: "DELETE" });
+  }
+
+  async listGoalIssueIds(goalId: string): Promise<string[]> {
+    const raw = await this.fetch<unknown>(`/api/goals/${goalId}/issues`);
+    return parseWithFallback(raw, GoalIssueIDsSchema, { issue_ids: [], total: 0 }, {
+      endpoint: "GET /api/goals/:id/issues",
+    }).issue_ids;
+  }
+
+  async linkGoalIssue(goalId: string, issueId: string): Promise<void> {
+    await this.fetch(`/api/goals/${goalId}/issues`, {
+      method: "POST",
+      body: JSON.stringify({ issue_id: issueId }),
+    });
+  }
+
+  async unlinkGoalIssue(goalId: string, issueId: string): Promise<void> {
+    await this.fetch(`/api/goals/${goalId}/issues/${issueId}`, { method: "DELETE" });
+  }
+
+  async listGoalsForIssue(issueId: string): Promise<Goal[]> {
+    const raw = await this.fetch<unknown>(`/api/issues/${issueId}/goals`);
+    return parseWithFallback(raw, GoalListSchema, EMPTY_GOAL_LIST, {
+      endpoint: "GET /api/issues/:id/goals",
+    }).goals;
+  }
+
+  async listGoalMilestones(goalId: string): Promise<MilestoneListResponse> {
+    const raw = await this.fetch<unknown>(`/api/goals/${goalId}/milestones`);
+    return parseWithFallback(raw, MilestoneListSchema, EMPTY_MILESTONE_LIST, {
+      endpoint: "GET /api/goals/:id/milestones",
+    });
+  }
+
+  async createMilestone(goalId: string, data: CreateMilestoneRequest): Promise<Milestone> {
+    const raw = await this.fetch<unknown>(`/api/goals/${goalId}/milestones`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    return parseWithFallback(raw, MilestoneSchema, EMPTY_MILESTONE, {
+      endpoint: "POST /api/goals/:id/milestones",
+    });
+  }
+
+  async getMilestone(id: string): Promise<Milestone> {
+    const raw = await this.fetch<unknown>(`/api/milestones/${id}`);
+    return parseWithFallback(raw, MilestoneSchema, EMPTY_MILESTONE, {
+      endpoint: "GET /api/milestones/:id",
+    });
+  }
+
+  /** The roadmap read: one workspace, one date window, every goal at once. */
+  async listMilestonesTimeline(from: string, to: string): Promise<MilestoneListResponse> {
+    const search = new URLSearchParams({ from, to });
+    const raw = await this.fetch<unknown>(`/api/milestones/timeline?${search}`);
+    return parseWithFallback(raw, MilestoneListSchema, EMPTY_MILESTONE_LIST, {
+      endpoint: "GET /api/milestones/timeline",
+    });
+  }
+
+  async updateMilestoneStatus(
+    id: string,
+    data: { status: string; actual_date?: string | null; accept_note?: string },
+  ): Promise<Milestone> {
+    const raw = await this.fetch<unknown>(`/api/milestones/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+    return parseWithFallback(raw, MilestoneSchema, EMPTY_MILESTONE, {
+      endpoint: "PATCH /api/milestones/:id/status",
+    });
+  }
+
+  /**
+   * Moves a planned date. The reason is required by the server, not merely by
+   * this signature: a date may only move by leaving a record behind, which is
+   * what keeps an overdue milestone from disappearing quietly.
+   */
+  async rescheduleMilestone(
+    id: string,
+    data: { planned_date: string; reason: string },
+  ): Promise<Milestone> {
+    const raw = await this.fetch<unknown>(`/api/milestones/${id}/schedule`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+    return parseWithFallback(raw, MilestoneSchema, EMPTY_MILESTONE, {
+      endpoint: "PATCH /api/milestones/:id/schedule",
+    });
+  }
+
+  async listMilestoneDateChanges(id: string) {
+    const raw = await this.fetch<unknown>(`/api/milestones/${id}/date-changes`);
+    return parseWithFallback(
+      raw,
+      MilestoneDateChangeListSchema,
+      { date_changes: [], total: 0 },
+      { endpoint: "GET /api/milestones/:id/date-changes" },
+    ).date_changes;
+  }
+
+  async listMilestoneReleases(id: string): Promise<MilestoneRelease[]> {
+    const raw = await this.fetch<unknown>(`/api/milestones/${id}/releases`);
+    return parseWithFallback(raw, MilestoneReleaseListSchema, EMPTY_MILESTONE_RELEASE_LIST, {
+      endpoint: "GET /api/milestones/:id/releases",
+    }).releases;
+  }
+
+  async createMilestoneRelease(
+    id: string,
+    data: {
+      kind: string;
+      repo_url?: string;
+      ref?: string;
+      tag?: string;
+      released_at?: string | null;
+      pull_request_id?: string | null;
+      pull_request_source?: string | null;
+      summary?: string;
+    },
+  ): Promise<MilestoneRelease> {
+    const raw = await this.fetch<unknown>(`/api/milestones/${id}/releases`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    return parseWithFallback(
+      raw,
+      MilestoneReleaseSchema,
+      EMPTY_MILESTONE_RELEASE_LIST.releases[0] ?? {
+        id: "",
+        milestone_id: "",
+        kind: "main",
+        repo_url: "",
+        ref: "",
+        tag: "",
+        released_at: null,
+        pull_request_id: null,
+        pull_request_source: null,
+        summary: "",
+        summary_by_type: null,
+        summary_by_id: null,
+        created_at: "",
+      },
+      { endpoint: "POST /api/milestones/:id/releases" },
+    );
+  }
+
+  async listMilestoneProposals(id: string): Promise<MilestoneProposal[]> {
+    const raw = await this.fetch<unknown>(`/api/milestones/${id}/proposals`);
+    return parseWithFallback(raw, MilestoneProposalListSchema, EMPTY_MILESTONE_PROPOSAL_LIST, {
+      endpoint: "GET /api/milestones/:id/proposals",
+    }).proposals;
+  }
+
+  /** The workspace-wide queue of claims still waiting on a human. */
+  async listPendingMilestoneProposals(): Promise<MilestoneProposal[]> {
+    const raw = await this.fetch<unknown>("/api/milestones/proposals");
+    return parseWithFallback(raw, MilestoneProposalListSchema, EMPTY_MILESTONE_PROPOSAL_LIST, {
+      endpoint: "GET /api/milestones/proposals",
+    }).proposals;
+  }
+
+  /**
+   * Settles a proposal. The server refuses `accepted` from an agent, including
+   * for its own proposal, and returns 409 if someone else already decided.
+   */
+  async decideMilestoneProposal(
+    proposalId: string,
+    data: { state: "accepted" | "rejected"; decide_note?: string },
+  ): Promise<{ proposal: MilestoneProposal; milestone?: Milestone }> {
+    const raw = await this.fetch<unknown>(
+      `/api/milestone-proposals/${proposalId}/decide`,
+      { method: "POST", body: JSON.stringify(data) },
+    );
+    const schema = MilestoneProposalSchema;
+    const parsed = raw as { proposal?: unknown; milestone?: unknown };
+    return {
+      proposal: parseWithFallback(
+        parsed?.proposal,
+        schema,
+        EMPTY_MILESTONE_PROPOSAL_LIST.proposals[0] ?? ({} as MilestoneProposal),
+        { endpoint: "POST /api/milestone-proposals/:id/decide" },
+      ),
+      milestone:
+        parsed?.milestone === undefined
+          ? undefined
+          : parseWithFallback(parsed.milestone, MilestoneSchema, EMPTY_MILESTONE, {
+              endpoint: "POST /api/milestone-proposals/:id/decide (milestone)",
+            }),
+    };
   }
 }
