@@ -37,35 +37,46 @@ server/migrations/451..468_*.sql        6 tables, 12 concurrent indexes
 server/pkg/db/queries/goal.sql          new file
 server/pkg/db/queries/milestone.sql     new file
 server/internal/goal/                   new package (this one)
+server/internal/handler/goal.go         new file
+server/internal/handler/milestone.go    new file
+server/internal/handler/*_test.go       new files
 ```
 
 Tables: `goal`, `goal_issue`, `milestone`, `milestone_date_change`,
-`milestone_release`, `milestone_proposal`. **Zero lines are added to any
-pre-existing SQL file, and no existing table gains a column.**
+`milestone_release`, `milestone_proposal`. **No existing table gains a column.**
+
+### The four places this touches upstream files
+
+The first is the one everybody expects. The other three were found by the
+repository's own guard tests, not by review, and each is a correctness
+requirement rather than a registration chore:
+
+| File | Why | Size |
+| --- | --- | --- |
+| `cmd/server/router.go` | Route registration, in the pattern of the `/api/projects` block. | +43, −0 |
+| `pkg/db/queries/workspace_delete.sql` | There are no foreign keys, so deleting a workspace deletes nothing here unless it is written down. Six CTEs in `DeleteWorkspaceLeafData`. | +21, −0 |
+| `internal/handler/workspace_delete_manifest_test.go` | `TestWorkspaceDeletionManifestCoversPublicSchema` fails until every new table states its teardown behaviour. | +6, −0 |
+| `cmd/migrate/main.go` | `TestEveryConcurrentUpBuildHasCleanup`: a `CREATE INDEX CONCURRENTLY` that is interrupted leaves an INVALID index behind, and with `IF NOT EXISTS` the retry would record that as success. Each build registers the index its retry must drop first. | +12, −0 |
+
+All four are pure insertions. A rebase re-applies four hunks; nothing else in
+this feature can conflict.
 
 Still to come, with their expected merge cost:
 
 | Step | Touches upstream | Cost |
 | --- | --- | --- |
-| `internal/handler/goal.go`, `milestone.go` | new files | none |
-| Route registration | ~12 lines in `cmd/server/router.go` | one hunk, in the pattern of the `/api/projects` block |
 | `packages/core/goals/`, `packages/views/goals/` | new directories | none |
 | Sidebar entry | ~2 lines in `packages/views/layout/app-sidebar.tsx` | one hunk |
 | Web + desktop routes | new files under each app's router | one hunk each |
 
-That is the whole intended footprint on existing files: **one route block, one
-nav entry, two router registrations.** Anything beyond it should be treated as
-a design smell and pushed back into this package.
-
 ### Rebasing onto upstream
 
-Because every conflict is confined to the four call sites above, a rebase is:
-
-1. `git rebase upstream/main` — migrations never conflict (new numbers), SQL
-   query files never conflict (new files), this package never conflicts.
+1. `git rebase upstream/main` — migrations never conflict (new numbers), query
+   files and this package never conflict.
 2. If a migration number collides with an upstream one, renumber this branch's
-   files upward. Nothing references migration numbers by name.
-3. Re-apply the route/nav hunks if upstream reshaped them.
+   files upward, and update the `cmd/migrate/main.go` keys to match. Nothing
+   else references migration numbers by name.
+3. Re-apply the four hunks above if upstream reshaped them.
 4. `make sqlc` — the generated file is derived, so regenerate rather than merge.
 
 ## Where the rules live

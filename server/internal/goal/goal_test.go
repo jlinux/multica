@@ -58,8 +58,10 @@ func TestValidate(t *testing.T) {
 	}{
 		{name: "aligned cycle goal", mutate: func(*Input) {}},
 		{
-			name:   "product goal needs a kind",
-			mutate: func(in *Input) { *in = Input{Level: LevelProduct, Title: "Console rebuild", HasParent: true, ParentLevel: LevelDirection} },
+			name: "product goal needs a kind",
+			mutate: func(in *Input) {
+				*in = Input{Level: LevelProduct, Title: "Console rebuild", HasParent: true, ParentLevel: LevelDirection}
+			},
 			// Defaulting this instead of demanding it would quietly collect
 			// every un-thought-about goal into one bucket.
 			wantErr: "base (sustain) or brk (explore)",
@@ -89,8 +91,10 @@ func TestValidate(t *testing.T) {
 			wantErr: "product goals only",
 		},
 		{
-			name:    "direction cannot align",
-			mutate:  func(in *Input) { *in = Input{Level: LevelDirection, Title: "Five minute integration", HasParent: true, ParentLevel: LevelDirection} },
+			name: "direction cannot align",
+			mutate: func(in *Input) {
+				*in = Input{Level: LevelDirection, Title: "Five minute integration", HasParent: true, ParentLevel: LevelDirection}
+			},
 			wantErr: "nothing above it",
 		},
 		{

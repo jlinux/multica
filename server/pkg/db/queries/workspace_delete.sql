@@ -486,6 +486,27 @@ deleted_lark_user_bindings AS (
 ),
 deleted_lark_binding_tokens AS (
     DELETE FROM lark_binding_token WHERE workspace_id = $1
+),
+-- Goal layer. Every table here carries workspace_id, so none of them needs one
+-- of the id sets above. Children are listed before their parents purely so the
+-- order reads as the dependency it is; there are no foreign keys to enforce it.
+deleted_milestone_proposals AS (
+    DELETE FROM milestone_proposal WHERE workspace_id = $1
+),
+deleted_milestone_releases AS (
+    DELETE FROM milestone_release WHERE workspace_id = $1
+),
+deleted_milestone_date_changes AS (
+    DELETE FROM milestone_date_change WHERE workspace_id = $1
+),
+deleted_milestones AS (
+    DELETE FROM milestone WHERE workspace_id = $1
+),
+deleted_goal_issue_links AS (
+    DELETE FROM goal_issue WHERE workspace_id = $1
+),
+deleted_goals AS (
+    DELETE FROM goal WHERE workspace_id = $1
 )
 -- Keep the two-system cleanup ledger until object storage has been settled.
 -- Moving every row out of pending also prevents a concurrent media bind from

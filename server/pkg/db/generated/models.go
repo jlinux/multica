@@ -735,6 +735,48 @@ type GithubPullRequestCheckSuite struct {
 	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
 }
 
+// Planning tier above issues: direction (1), product goal (2), cycle goal (3). Deliberately not the issue table — goals are never assignable to an agent and never enter the task queue. Execution links through goal_issue.
+type Goal struct {
+	ID          pgtype.UUID `json:"id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	// Tier: 1 direction (1-3y), 2 product goal (6-12m), 3 cycle goal (2w-3m). Immutable after creation.
+	Level       int16  `json:"level"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	// Aligned-to goal, exactly one tier up. NULL means an orphan goal, which is a displayed category and not an error. Tier compatibility is checked in application code; no FK by house rule.
+	ParentGoalID pgtype.UUID `json:"parent_goal_id"`
+	OrphanReason string      `json:"orphan_reason"`
+	// Previous L3 in a continuation chain (2.0 -> 2.1). Independent of parent_goal_id.
+	PrevGoalID pgtype.UUID `json:"prev_goal_id"`
+	ProjectID  pgtype.UUID `json:"project_id"`
+	Kind       pgtype.Text `json:"kind"`
+	Status     string      `json:"status"`
+	// member | agent. An agent owner is the goal's record-keeper: it proposes milestone achievements and drafts summaries. It confers no execution or approval rights.
+	OwnerType pgtype.Text `json:"owner_type"`
+	OwnerID   pgtype.UUID `json:"owner_id"`
+	Cycle     string      `json:"cycle"`
+	DueDate   pgtype.Date `json:"due_date"`
+	// Created after the work already shipped. Feeds the planned-vs-unplanned mix, which is a team signal only and is never attributed to a person.
+	IsRetro       bool               `json:"is_retro"`
+	Position      float64            `json:"position"`
+	CreatedByType string             `json:"created_by_type"`
+	CreatedByID   pgtype.UUID        `json:"created_by_id"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt     pgtype.Timestamptz `json:"deleted_at"`
+}
+
+// Links a goal (in practice level 3) to the issues delivering it. The issue side stores nothing, which is what keeps goals structurally out of the assignable pool, my-issues and autopilot scans.
+type GoalIssue struct {
+	GoalID      pgtype.UUID `json:"goal_id"`
+	IssueID     pgtype.UUID `json:"issue_id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	// member | agent. An agent links issues when it derives the connection itself, e.g. while proposing a goal from an existing cluster of work.
+	LinkedByType pgtype.Text        `json:"linked_by_type"`
+	LinkedByID   pgtype.UUID        `json:"linked_by_id"`
+	LinkedAt     pgtype.Timestamptz `json:"linked_at"`
+}
+
 type InboxItem struct {
 	ID            pgtype.UUID        `json:"id"`
 	WorkspaceID   pgtype.UUID        `json:"workspace_id"`
@@ -1018,6 +1060,100 @@ type Member struct {
 	UserID      pgtype.UUID        `json:"user_id"`
 	Role        string             `json:"role"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+// Launch -> first real use -> continued use. Launch is the first of three, not the finish line; a goal stuck at launch is the signal this table exists to surface.
+type Milestone struct {
+	ID             pgtype.UUID `json:"id"`
+	WorkspaceID    pgtype.UUID `json:"workspace_id"`
+	GoalID         pgtype.UUID `json:"goal_id"`
+	Type           string      `json:"type"`
+	N              pgtype.Int4 `json:"n"`
+	Title          string      `json:"title"`
+	ValueStatement string      `json:"value_statement"`
+	// First date ever planned, never rewritten. On-time attainment is measured against this so a reschedule cannot turn a slip into a hit. Aggregate reporting only, never per person.
+	OriginalPlannedDate pgtype.Date `json:"original_planned_date"`
+	PlannedDate         pgtype.Date `json:"planned_date"`
+	ActualDate          pgtype.Date `json:"actual_date"`
+	Status              string      `json:"status"`
+	IsDelayed           bool        `json:"is_delayed"`
+	// verifier | analytics | agent — how "really used" is decided, fixed at creation. Required for first_use and nth_use so adoption stays comparable across owners.
+	AdoptionCheck  pgtype.Text `json:"adoption_check"`
+	AdoptionConfig []byte      `json:"adoption_config"`
+	// member | agent | external. external is a verifier with no seat, confirming through a signed single-use link; verifier_label holds their name.
+	VerifierType   pgtype.Text        `json:"verifier_type"`
+	VerifierID     pgtype.UUID        `json:"verifier_id"`
+	VerifierLabel  string             `json:"verifier_label"`
+	AcceptedByType pgtype.Text        `json:"accepted_by_type"`
+	AcceptedByID   pgtype.UUID        `json:"accepted_by_id"`
+	AcceptNote     string             `json:"accept_note"`
+	AcceptedAt     pgtype.Timestamptz `json:"accepted_at"`
+	IsRetro        bool               `json:"is_retro"`
+	CreatedByType  string             `json:"created_by_type"`
+	CreatedByID    pgtype.UUID        `json:"created_by_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
+}
+
+// Append-only reschedule log. A milestone date may only move by writing a row here with a reason, so no overdue item disappears quietly. Read in aggregate for planning quality, never as a per-person record.
+type MilestoneDateChange struct {
+	ID            pgtype.UUID        `json:"id"`
+	WorkspaceID   pgtype.UUID        `json:"workspace_id"`
+	MilestoneID   pgtype.UUID        `json:"milestone_id"`
+	FromDate      pgtype.Date        `json:"from_date"`
+	ToDate        pgtype.Date        `json:"to_date"`
+	Reason        string             `json:"reason"`
+	ChangedByType string             `json:"changed_by_type"`
+	ChangedByID   pgtype.UUID        `json:"changed_by_id"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+// An agent proposes a milestone has been reached and attaches evidence; a human accepts or rejects. Proposals never apply themselves — the party doing the work does not certify the work. This is what moves the data-entry cost of the goal layer off the humans.
+type MilestoneProposal struct {
+	ID                 pgtype.UUID `json:"id"`
+	WorkspaceID        pgtype.UUID `json:"workspace_id"`
+	MilestoneID        pgtype.UUID `json:"milestone_id"`
+	ProposedStatus     string      `json:"proposed_status"`
+	ProposedActualDate pgtype.Date `json:"proposed_actual_date"`
+	Evidence           string      `json:"evidence"`
+	// Structured pointers backing the proposal: pull request ids, ticket ids, log queries, analytics event counts. Rendered as links next to the prose in evidence.
+	EvidenceRefs   []byte      `json:"evidence_refs"`
+	ProposedByType string      `json:"proposed_by_type"`
+	ProposedByID   pgtype.UUID `json:"proposed_by_id"`
+	// The agent run that produced this proposal. Makes the claim auditable: a reviewer can open the execution log, diff and token cost behind the assertion. No FK; evidence text survives a deleted task.
+	SourceTaskID  pgtype.UUID        `json:"source_task_id"`
+	SourceIssueID pgtype.UUID        `json:"source_issue_id"`
+	State         string             `json:"state"`
+	DecidedByType pgtype.Text        `json:"decided_by_type"`
+	DecidedByID   pgtype.UUID        `json:"decided_by_id"`
+	DecidedAt     pgtype.Timestamptz `json:"decided_at"`
+	DecideNote    string             `json:"decide_note"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+// Releases delivering a milestone: main plus any hotfixes. Either typed in manually or linked to an existing github_pull_request / vcs_pull_request row, which is how agent-produced PRs reach the delivery record without retyping.
+type MilestoneRelease struct {
+	ID            pgtype.UUID `json:"id"`
+	WorkspaceID   pgtype.UUID `json:"workspace_id"`
+	MilestoneID   pgtype.UUID `json:"milestone_id"`
+	Kind          string      `json:"kind"`
+	RepoUrl       string      `json:"repo_url"`
+	Ref           string      `json:"ref"`
+	Tag           string      `json:"tag"`
+	ReleasedAt    pgtype.Date `json:"released_at"`
+	PullRequestID pgtype.UUID `json:"pull_request_id"`
+	// github | vcs — which table pull_request_id points into. Multica stores GitHub App PRs and forgejo/gitea/gitlab PRs separately, so the id alone is ambiguous.
+	PullRequestSource pgtype.Text `json:"pull_request_source"`
+	// Release notes in the language of the people who will use the feature. Usually drafted by an agent from the PR range, then edited by a human before publishing.
+	Summary       string             `json:"summary"`
+	SummaryByType pgtype.Text        `json:"summary_by_type"`
+	SummaryByID   pgtype.UUID        `json:"summary_by_id"`
+	SummaryAt     pgtype.Timestamptz `json:"summary_at"`
+	CreatedByType string             `json:"created_by_type"`
+	CreatedByID   pgtype.UUID        `json:"created_by_id"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 type NotificationPreference struct {

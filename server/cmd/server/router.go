@@ -1981,6 +1981,49 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				})
 			})
 
+			// Goals: the planning tier above issues. Goals are never assignable
+			// and never appear in the issue routes; the only connection is the
+			// explicit issue link below.
+			r.Route("/api/goals", func(r chi.Router) {
+				r.Get("/", h.ListGoals)
+				r.Post("/", h.CreateGoal)
+				r.Route("/{id}", func(r chi.Router) {
+					r.Get("/", h.GetGoal)
+					r.Put("/", h.UpdateGoal)
+					r.Delete("/", h.DeleteGoal)
+					r.Get("/issues", h.ListGoalIssues)
+					r.Post("/issues", h.LinkGoalIssue)
+					r.Delete("/issues/{issueId}", h.UnlinkGoalIssue)
+					r.Get("/milestones", h.ListGoalMilestones)
+					r.Post("/milestones", h.CreateMilestone)
+				})
+			})
+
+			// Milestones. The static segments are declared before {milestoneId}
+			// so the timeline and the proposal queue cannot be read as ids.
+			r.Route("/api/milestones", func(r chi.Router) {
+				r.Get("/timeline", h.ListMilestonesTimeline)
+				r.Get("/proposals", h.ListPendingMilestoneProposals)
+				r.Route("/{milestoneId}", func(r chi.Router) {
+					r.Get("/", h.GetMilestone)
+					r.Patch("/status", h.UpdateMilestoneStatus)
+					r.Patch("/schedule", h.RescheduleMilestone)
+					r.Get("/date-changes", h.ListMilestoneDateChanges)
+					r.Get("/releases", h.ListMilestoneReleases)
+					r.Post("/releases", h.CreateMilestoneRelease)
+					r.Get("/proposals", h.ListMilestoneProposals)
+					r.Post("/proposals", h.CreateMilestoneProposal)
+				})
+			})
+
+			// Deciding a proposal is addressed by the proposal, not by its
+			// milestone: the reviewer arrives from the inbox holding that id.
+			r.Post("/api/milestone-proposals/{proposalId}/decide", h.DecideMilestoneProposal)
+
+			// Which goals an issue serves. Lives under the issue path because
+			// that is where it is read, but the issue table stores nothing.
+			r.Get("/api/issues/{id}/goals", h.ListGoalsForIssue)
+
 			// Squads
 			r.Route("/api/squads", func(r chi.Router) {
 				r.Get("/", h.ListSquads)
