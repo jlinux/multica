@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS idx_milestone_date_change_milestone;
