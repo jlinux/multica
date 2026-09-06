@@ -91,6 +91,7 @@ import { ThreadNavPanel, mentionsUser, type ThreadNavThread } from "./thread-nav
 import { collectThreadReplies, deriveThreadResolution } from "./thread-utils";
 import { IssueAgentHeaderChip } from "./issue-agent-header-chip";
 import { ExecutionLogSection } from "./execution-log-section";
+import { IssueGoalSection } from "../../goals/components";
 import { QuickActionsSection } from "./quick-actions-section";
 import { PluginPanelSection } from "../../plugins";
 import { PullRequestList } from "./pull-request-list";
@@ -2510,6 +2511,11 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
           click an action they cannot run, and the refusal is explained at run
           time rather than by a silently shorter list. */}
       <QuickActionsSection issueId={issue.id} />
+      {/* The goal side of the seam: which direction this work serves, and any
+          milestone an agent has claimed from a run on this issue. Renders
+          nothing when the issue serves no goal, so a workspace that does not
+          use goals pays no sidebar space for it. */}
+      <IssueGoalSection issueId={issue.id} />
       <PluginPanelSection issueId={issue.id} />
 
       {/* Parent issue — standalone section, only when the issue has a

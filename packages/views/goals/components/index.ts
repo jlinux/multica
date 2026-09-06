@@ -2,3 +2,8 @@ export { GoalsPage } from "./goals-page";
 export { GoalPanorama } from "./goal-panorama";
 export { GoalTimeline } from "./goal-timeline";
 export { GoalDetailPage } from "./goal-detail-page";
+export { IssueGoalSection } from "./issue-goal-section";
+export { MilestoneProposalCard } from "./milestone-proposal-card";
+export { GoalFormDialog } from "./goal-form-dialog";
+export { MilestoneFormDialog } from "./milestone-form-dialog";
+export { RescheduleDialog } from "./reschedule-dialog";

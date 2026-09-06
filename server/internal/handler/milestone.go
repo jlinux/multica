@@ -12,6 +12,7 @@ import (
 	goalrules "github.com/multica-ai/multica/server/internal/goal"
 	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
+	"github.com/multica-ai/multica/server/pkg/protocol"
 )
 
 type MilestoneResponse struct {
@@ -270,7 +271,12 @@ func (h *Handler) CreateMilestone(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to create milestone")
 		return
 	}
-	writeJSON(w, http.StatusCreated, milestoneToResponse(m))
+	resp := milestoneToResponse(m)
+	h.publishGoalChange(r, protocol.EventMilestoneCreated, map[string]any{
+		"goal_id":   uuidToString(g.ID),
+		"milestone": resp,
+	})
+	writeJSON(w, http.StatusCreated, resp)
 }
 
 func (h *Handler) loadMilestone(w http.ResponseWriter, r *http.Request) (db.Milestone, pgtype.UUID, bool) {
@@ -423,6 +429,10 @@ func (h *Handler) UpdateMilestoneStatus(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusInternalServerError, "failed to update milestone")
 		return
 	}
+	h.publishGoalChange(r, protocol.EventMilestoneUpdated, map[string]any{
+		"goal_id":      uuidToString(m.GoalID),
+		"milestone_id": uuidToString(m.ID),
+	})
 	// Through milestoneResponses, not the bare mapper: a client that renders
 	// from the mutation response has to see the same milestone the next GET
 	// would give it, counters included.
@@ -504,6 +514,10 @@ func (h *Handler) RescheduleMilestone(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to reschedule milestone")
 		return
 	}
+	h.publishGoalChange(r, protocol.EventMilestoneUpdated, map[string]any{
+		"goal_id":      uuidToString(m.GoalID),
+		"milestone_id": uuidToString(m.ID),
+	})
 	// Counted after the commit, so the "moved n times" badge the caller draws
 	// from this response already includes the move it just made. Reading it
 	// inside the transaction would return the pre-insert count.
@@ -643,6 +657,10 @@ func (h *Handler) CreateMilestoneRelease(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusInternalServerError, "failed to record the release")
 		return
 	}
+	h.publishGoalChange(r, protocol.EventMilestoneUpdated, map[string]any{
+		"goal_id":      uuidToString(m.GoalID),
+		"milestone_id": uuidToString(m.ID),
+	})
 	writeJSON(w, http.StatusCreated, releaseToResponse(rel))
 }
 
@@ -829,6 +847,13 @@ func (h *Handler) CreateMilestoneProposal(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusInternalServerError, "failed to record the proposal")
 		return
 	}
+	// The claim has to reach whoever can judge it, not only whoever happens to
+	// reload the page. This is the event behind the inbox badge.
+	h.publishGoalChange(r, protocol.EventMilestoneProposed, map[string]any{
+		"goal_id":      uuidToString(m.GoalID),
+		"milestone_id": uuidToString(m.ID),
+		"proposal_id":  uuidToString(p.ID),
+	})
 	writeJSON(w, http.StatusCreated, proposalToResponse(p))
 }
 
@@ -982,6 +1007,12 @@ func (h *Handler) DecideMilestoneProposal(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusInternalServerError, "failed to decide the proposal")
 		return
 	}
+
+	h.publishGoalChange(r, protocol.EventMilestoneDecided, map[string]any{
+		"milestone_id": uuidToString(decided.MilestoneID),
+		"proposal_id":  uuidToString(decided.ID),
+		"state":        decided.State,
+	})
 
 	resp := map[string]any{"proposal": proposalToResponse(decided)}
 	if state == goalrules.ProposalAccepted {

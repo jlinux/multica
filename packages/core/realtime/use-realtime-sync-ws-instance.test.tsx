@@ -117,11 +117,18 @@ describe("useRealtimeSync — ws instance change", () => {
     rerender({ ws: ws2 });
 
     // Should have called invalidateQueries for all workspace-scoped keys
-    // (16 workspace-scoped [incl. property definitions] + 6 per-issue
-    // prefixes + the workspace working-agents projection + 5 per-chat
-    // prefixes + 1 workspaceKeys.list() + 1 cross-workspace inbox unread
-    // summary = 31 calls)
-    expect(invalidateSpy).toHaveBeenCalledTimes(31);
+    // (18 workspace-scoped [incl. property definitions, goals and milestones]
+    // + 6 per-issue prefixes + the workspace working-agents projection + 5
+    // per-chat prefixes + 1 workspaceKeys.list() + 1 cross-workspace inbox
+    // unread summary = 33 calls)
+    //
+    // The count is asserted, rather than only the keys, because the cost of
+    // this catch-up is paid on every reconnect by every client: a key added
+    // here without a reason is a refetch storm nobody notices until a large
+    // workspace does. Goals and milestones earned their two because the tier
+    // is shared — a plan someone else changed while this client was offline is
+    // exactly the context it would otherwise keep rendering stale.
+    expect(invalidateSpy).toHaveBeenCalledTimes(33);
   });
 
   it("does not re-invalidate when rerendered with the same ws instance", () => {

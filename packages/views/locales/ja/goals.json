@@ -1,45 +1,4 @@
 {
-  "page": {
-    "title": "ゴール",
-    "subtitle": "方向性、プロダクトゴール、そしてこの期間に届けるもの",
-    "new_goal": "ゴールを作成",
-    "loading": "ゴールを読み込み中"
-  },
-  "tier": {
-    "direction": "方向性",
-    "direction_hint": "1〜3 年",
-    "product": "プロダクトゴール",
-    "product_hint": "半年〜1 年",
-    "cycle": "サイクルゴール",
-    "cycle_hint": "2 週間〜3 か月",
-    "aligns_to": "紐づく先",
-    "count_other": "{{count}} 件"
-  },
-  "kind": {
-    "base": "基盤の強化",
-    "brk": "新領域の開拓"
-  },
-  "status": {
-    "not_started": "未着手",
-    "in_progress": "進行中",
-    "at_risk": "リスクあり",
-    "done": "完了",
-    "archived": "アーカイブ済み"
-  },
-  "orphan": {
-    "section": "独立したゴール",
-    "hint": "不備ではなく意図的です。一度きりの仕事を無理に方向性へ紐づける必要はありません",
-    "badge": "独立"
-  },
-  "warning": {
-    "unpicked": "まだ下位のゴールがありません"
-  },
-  "milestone": {
-    "launch": "リリース",
-    "first_use": "最初の実利用",
-    "nth_use": "継続利用",
-    "progress": "3 件中 {{done}} 件達成"
-  },
   "badge": {
     "retro": "事後登録",
     "continues": "前のゴールの続き"
@@ -48,36 +7,6 @@
     "clear": "ハイライトを解除",
     "focus": "この連鎖をハイライト",
     "open": "ゴールを開く"
-  },
-  "empty": {
-    "title": "ゴールがまだありません",
-    "description": "ゴールはこの期間に何を届けるかを示します。設定すると、リリースしたか、実際に使われたか、今も使われているかを問い続けます。",
-    "action": "最初のゴールを作成",
-    "footnote": "今は 1 階層だけです。プロジェクトをまたいでゴールが増えたら、まとめる階層を追加できます。"
-  },
-  "error": {
-    "title": "ゴールを読み込めませんでした",
-    "retry": "再試行"
-  },
-  "view": {
-    "panorama": "パノラマ",
-    "timeline": "タイムライン"
-  },
-  "timeline": {
-    "empty_description": "ゴールにマイルストーンが付くとここに表示されます。まずはリリース日を決め、利用はその後です。",
-    "empty_title": "ロードマップにまだ何もありません",
-    "gap_days_other": "{{count}} 日",
-    "legend_first_use": "最初の実利用",
-    "legend_launch": "リリース",
-    "legend_moved": "最初に計画した日",
-    "legend_nth_use": "継続利用",
-    "legend_unused": "リリース済み、利用者なし",
-    "moved_from": "当初 {{date}}",
-    "moved_times_other": "{{count}} 回変更",
-    "no_product": "プロダクト未設定",
-    "subtitle": "プロダクト別に並べたマイルストーン。見るべきは印の間隔であって、長さではありません。",
-    "today": "今日",
-    "unused_days_other": "リリースから {{count}} 日、まだ未利用"
   },
   "detail": {
     "actual": "実績",
@@ -108,5 +37,138 @@
     "seam_title": "このゴールはエージェントに割り当てられません",
     "unassigned": "未割り当て",
     "verifier": "確認者"
+  },
+  "empty": {
+    "title": "ゴールがまだありません",
+    "description": "ゴールはこの期間に何を届けるかを示します。設定すると、リリースしたか、実際に使われたか、今も使われているかを問い続けます。",
+    "action": "最初のゴールを作成",
+    "footnote": "今は 1 階層だけです。プロジェクトをまたいでゴールが増えたら、まとめる階層を追加できます。"
+  },
+  "error": {
+    "title": "ゴールを読み込めませんでした",
+    "retry": "再試行"
+  },
+  "form": {
+    "adoption": "利用の判定方法",
+    "cancel": "キャンセル",
+    "create_goal": "ゴールを作成",
+    "create_goal_submit": "作成",
+    "create_milestone": "マイルストーンを追加",
+    "create_milestone_submit": "追加",
+    "cycle": "サイクル",
+    "cycle_placeholder": "2026 下期",
+    "description": "説明",
+    "due": "期限",
+    "kind": "種別",
+    "milestone_title_placeholder": "何が成立しますか?",
+    "milestone_type": "段階",
+    "nth": "何回目の利用",
+    "orphan_reason": "独立の理由",
+    "orphan_reason_placeholder": "一文で十分です",
+    "parent": "紐づく先",
+    "parent_none": "紐づけない — 独立したゴール",
+    "planned_date": "予定日",
+    "project": "プロダクト",
+    "project_none": "プロダクトを選択",
+    "required": "必須",
+    "reschedule": "日付を変更",
+    "reschedule_hint": "最初に計画した日付はマイルストーンに残り、達成率はそれで測られます。",
+    "reschedule_reason": "理由",
+    "reschedule_reason_placeholder": "記録に残ります。責任追及には使いません",
+    "reschedule_submit": "変更する",
+    "saving": "保存中…",
+    "tier": "階層",
+    "title": "タイトル",
+    "title_placeholder": "何を届けますか?",
+    "value_statement": "この提供の価値",
+    "value_statement_placeholder": "使う人の言葉で",
+    "verifier_label": "確認する人",
+    "verifier_label_placeholder": "氏名またはチーム"
+  },
+  "issue_panel": {
+    "heading": "ゴール",
+    "hint": "この作業が届けるもの",
+    "none": "ゴールに紐づいていません",
+    "pending_other": "この作業からのマイルストーン提案 {{count}} 件"
+  },
+  "kind": {
+    "base": "基盤の強化",
+    "brk": "新領域の開拓"
+  },
+  "milestone": {
+    "launch": "リリース",
+    "first_use": "最初の実利用",
+    "nth_use": "継続利用",
+    "progress": "3 件中 {{done}} 件達成"
+  },
+  "orphan": {
+    "section": "独立したゴール",
+    "hint": "不備ではなく意図的です。一度きりの仕事を無理に方向性へ紐づける必要はありません",
+    "badge": "独立"
+  },
+  "page": {
+    "title": "ゴール",
+    "subtitle": "方向性、プロダクトゴール、そしてこの期間に届けるもの",
+    "new_goal": "ゴールを作成",
+    "loading": "ゴールを読み込み中"
+  },
+  "proposal": {
+    "accept": "承認",
+    "accepting": "承認中…",
+    "conflict": "すでに他の人が判断しています",
+    "decided_accepted": "承認済み",
+    "decided_rejected": "却下",
+    "decided_superseded": "新しい提案に置き換えられました",
+    "evidence": "根拠",
+    "heading": "エージェントの提案",
+    "human_only": "エージェントは自分の提案を承認できません。人が判断します。",
+    "none": "提案はまだありません",
+    "note_placeholder": "メモを追加(任意)",
+    "open_issue": "この課題から",
+    "open_run": "該当の実行を開く",
+    "proposed_by": "エージェントによる提案",
+    "proposes_achieved": "達成されたことを提案しています",
+    "proposes_pending": "承認待ちに進めることを提案しています",
+    "reject": "却下"
+  },
+  "status": {
+    "not_started": "未着手",
+    "in_progress": "進行中",
+    "at_risk": "リスクあり",
+    "done": "完了",
+    "archived": "アーカイブ済み"
+  },
+  "tier": {
+    "direction": "方向性",
+    "direction_hint": "1〜3 年",
+    "product": "プロダクトゴール",
+    "product_hint": "半年〜1 年",
+    "cycle": "サイクルゴール",
+    "cycle_hint": "2 週間〜3 か月",
+    "aligns_to": "紐づく先",
+    "count_other": "{{count}} 件"
+  },
+  "timeline": {
+    "empty_description": "ゴールにマイルストーンが付くとここに表示されます。まずはリリース日を決め、利用はその後です。",
+    "empty_title": "ロードマップにまだ何もありません",
+    "gap_days_other": "{{count}} 日",
+    "legend_first_use": "最初の実利用",
+    "legend_launch": "リリース",
+    "legend_moved": "最初に計画した日",
+    "legend_nth_use": "継続利用",
+    "legend_unused": "リリース済み、利用者なし",
+    "moved_from": "当初 {{date}}",
+    "moved_times_other": "{{count}} 回変更",
+    "no_product": "プロダクト未設定",
+    "subtitle": "プロダクト別に並べたマイルストーン。見るべきは印の間隔であって、長さではありません。",
+    "today": "今日",
+    "unused_days_other": "リリースから {{count}} 日、まだ未利用"
+  },
+  "view": {
+    "panorama": "パノラマ",
+    "timeline": "タイムライン"
+  },
+  "warning": {
+    "unpicked": "まだ下位のゴールがありません"
   }
 }

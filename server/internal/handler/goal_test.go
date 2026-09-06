@@ -4,7 +4,9 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/multica-ai/multica/server/internal/events"
 	"github.com/multica-ai/multica/server/internal/testutil"
+	"github.com/multica-ai/multica/server/pkg/protocol"
 )
 
 // newGoal creates a goal through the handler and returns its id. Tests that
@@ -266,4 +268,109 @@ func TestGoalEndpointsRejectMalformedBodies(t *testing.T) {
 		"X-User-ID", testUserID, "X-Workspace-ID", testWorkspaceID,
 	)
 	testutil.Call(t, testHandler.CreateGoal, malformed).Want(http.StatusBadRequest)
+}
+
+// Everyone in a workspace shares its plan, so every write to the goal tier has
+// to reach the people looking at it — not only whoever happens to reload. These
+// are the events the client turns into cache invalidation.
+func TestGoalWritesBroadcastToTheWorkspace(t *testing.T) {
+	if testHandler == nil {
+		t.Skip("no database")
+	}
+
+	seen := make(chan events.Event, 8)
+	for _, eventType := range []string{
+		protocol.EventGoalCreated,
+		protocol.EventGoalUpdated,
+		protocol.EventGoalDeleted,
+		protocol.EventGoalIssuesChanged,
+		protocol.EventMilestoneCreated,
+	} {
+		testHandler.Bus.Subscribe(eventType, func(e events.Event) {
+			select {
+			case seen <- e:
+			default:
+			}
+		})
+	}
+	drain := func() []events.Event {
+		var out []events.Event
+		for {
+			select {
+			case e := <-seen:
+				out = append(out, e)
+			default:
+				return out
+			}
+		}
+	}
+	typesOf := func(list []events.Event) []string {
+		out := make([]string, len(list))
+		for i, e := range list {
+			out[i] = e.Type
+		}
+		return out
+	}
+	contains := func(list []string, want string) bool {
+		for _, got := range list {
+			if got == want {
+				return true
+			}
+		}
+		return false
+	}
+
+	drain()
+	direction := directionGoal(t, "Broadcast direction")
+	product := productGoal(t, "Broadcast product", direction.ID)
+	cycle := newGoal(t, map[string]any{
+		"level": 3, "title": "Broadcast cycle", "parent_goal_id": product.ID,
+	})
+	if got := typesOf(drain()); !contains(got, protocol.EventGoalCreated) {
+		t.Fatalf("creating a goal published %v, want it to include %s", got, protocol.EventGoalCreated)
+	}
+
+	// Every event carries the workspace, because that is what the realtime hub
+	// routes on: an event without one reaches nobody.
+	testutil.Call(t, testHandler.UpdateGoal,
+		withURLParam(newRequest("PUT", "/api/goals/"+cycle.ID, map[string]any{
+			"title": "Broadcast cycle, renamed",
+		}), "id", cycle.ID)).Want(http.StatusOK)
+	updates := drain()
+	if !contains(typesOf(updates), protocol.EventGoalUpdated) {
+		t.Fatalf("updating a goal published %v, want %s", typesOf(updates), protocol.EventGoalUpdated)
+	}
+	for _, event := range updates {
+		if event.WorkspaceID != testWorkspaceID {
+			t.Errorf("%s carried workspace %q, want %q — the hub routes on it",
+				event.Type, event.WorkspaceID, testWorkspaceID)
+		}
+	}
+
+	issueID := dbfx.Issue(t, "Broadcast linked issue")
+	testutil.Call(t, testHandler.LinkGoalIssue,
+		withURLParam(newRequest("POST", "/api/goals/"+cycle.ID+"/issues", map[string]any{
+			"issue_id": issueID,
+		}), "id", cycle.ID)).Want(http.StatusOK)
+	if got := typesOf(drain()); !contains(got, protocol.EventGoalIssuesChanged) {
+		t.Fatalf("linking an issue published %v, want %s", got, protocol.EventGoalIssuesChanged)
+	}
+
+	testutil.Call(t, testHandler.CreateMilestone,
+		withURLParam(newRequest("POST", "/api/goals/"+cycle.ID+"/milestones", map[string]any{
+			"type": "launch", "title": "Broadcast launch", "planned_date": "2026-10-10",
+		}), "id", cycle.ID)).Want(http.StatusCreated)
+	if got := typesOf(drain()); !contains(got, protocol.EventMilestoneCreated) {
+		t.Fatalf("creating a milestone published %v, want %s", got, protocol.EventMilestoneCreated)
+	}
+
+	// Deletion publishes AFTER the commit. Announcing it inside the transaction
+	// would let a listener refetch, see the goal gone, and then have it come
+	// back when the transaction rolled back.
+	testutil.Call(t, testHandler.DeleteGoal,
+		withURLParam(newRequest("DELETE", "/api/goals/"+cycle.ID, nil), "id", cycle.ID)).
+		Want(http.StatusOK)
+	if got := typesOf(drain()); !contains(got, protocol.EventGoalDeleted) {
+		t.Fatalf("deleting a goal published %v, want %s", got, protocol.EventGoalDeleted)
+	}
 }

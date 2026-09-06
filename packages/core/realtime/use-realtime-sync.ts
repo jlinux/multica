@@ -11,6 +11,7 @@ import { defaultStorage } from "../platform/storage";
 import { getCurrentWsId, getCurrentSlug } from "../platform/workspace-storage";
 import { issueKeys } from "../issues/queries";
 import { projectKeys } from "../projects/queries";
+import { goalKeys, milestoneKeys } from "../goals/queries";
 import { pinKeys } from "../pins/queries";
 import { autopilotKeys } from "../autopilots/queries";
 import { runtimeKeys } from "../runtimes/queries";
@@ -650,6 +651,11 @@ function invalidateWorkspaceScopedQueries(qc: QueryClient): void {
     qc.invalidateQueries({ queryKey: workspaceKeys.skills(wsId) });
     qc.invalidateQueries({ queryKey: workspaceKeys.invitations(wsId) });
     qc.invalidateQueries({ queryKey: projectKeys.all(wsId) });
+    // The goal tier is shared, so a plan someone else changed while this
+    // client was offline is exactly the context it would otherwise keep
+    // rendering stale.
+    qc.invalidateQueries({ queryKey: goalKeys.all(wsId) });
+    qc.invalidateQueries({ queryKey: milestoneKeys.all(wsId) });
     qc.invalidateQueries({ queryKey: runtimeKeys.all(wsId) });
     qc.invalidateQueries({ queryKey: autopilotKeys.all(wsId) });
     qc.invalidateQueries({ queryKey: agentTaskSnapshotKeys.all(wsId) });
@@ -792,6 +798,24 @@ export function useRealtimeSync(
       project: () => {
         const wsId = getCurrentWsId();
         if (wsId) qc.invalidateQueries({ queryKey: projectKeys.all(wsId) });
+      },
+      // goal:created / goal:updated / goal:deleted / goal:issues_changed.
+      // Invalidated as one tree rather than per key: alignment edits move a
+      // goal between tiers and sections, change two other goals' child counts,
+      // and re-sort the panorama, so nothing narrower is correct.
+      goal: () => {
+        const wsId = getCurrentWsId();
+        if (wsId) qc.invalidateQueries({ queryKey: goalKeys.all(wsId) });
+      },
+      // milestone:created / :updated / :proposed / :decided. Goals are
+      // invalidated too: a decision moves the milestone, and the goal views
+      // read milestone state through their own keys.
+      milestone: () => {
+        const wsId = getCurrentWsId();
+        if (wsId) {
+          qc.invalidateQueries({ queryKey: milestoneKeys.all(wsId) });
+          qc.invalidateQueries({ queryKey: goalKeys.all(wsId) });
+        }
       },
       squad: () => {
         const wsId = getCurrentWsId();

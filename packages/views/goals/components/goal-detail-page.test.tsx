@@ -1,6 +1,11 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { screen, within } from "@testing-library/react";
-import type { Goal, GoalIssue, Milestone } from "@multica/core/goals";
+import type {
+  Goal,
+  GoalIssue,
+  Milestone,
+  MilestoneProposal,
+} from "@multica/core/goals";
 import { renderWithI18n } from "../../test/i18n";
 import { NavigationProvider, type NavigationAdapter } from "../../navigation";
 import { GoalDetailPage } from "./goal-detail-page";
@@ -10,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   milestones: [] as Milestone[],
   issues: [] as GoalIssue[],
   allGoals: [] as Goal[],
+  proposals: [] as MilestoneProposal[],
   isPending: false,
   isError: false,
 }));
@@ -22,6 +28,7 @@ vi.mock("@tanstack/react-query", () => ({
     { data: mocks.milestones, isPending: false, isError: false },
     { data: mocks.issues, isPending: false, isError: false },
     { data: mocks.allGoals, isPending: false, isError: false },
+    { data: mocks.proposals, isPending: false, isError: false },
   ],
   useQuery: () => ({ data: undefined }),
 }));
@@ -31,6 +38,8 @@ vi.mock("@multica/core/goals", () => ({
   goalMilestonesOptions: () => ({ queryKey: ["milestones"] }),
   goalIssuesOptions: () => ({ queryKey: ["issues"] }),
   goalListOptions: () => ({ queryKey: ["goals"] }),
+  pendingMilestoneProposalsOptions: () => ({ queryKey: ["proposals", "pending"] }),
+  useDecideMilestoneProposal: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
 }));
 
 vi.mock("@multica/core/hooks", () => ({ useWorkspaceId: () => "workspace-1" }));
@@ -126,6 +135,7 @@ beforeEach(() => {
   mocks.milestones = [];
   mocks.issues = [];
   mocks.allGoals = [];
+  mocks.proposals = [];
   mocks.isPending = false;
   mocks.isError = false;
 });

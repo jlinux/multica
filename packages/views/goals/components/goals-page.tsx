@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { Plus } from "lucide-react";
 import { useT } from "../../i18n";
 import { useNavigation } from "../../navigation";
@@ -9,6 +9,7 @@ import { Button } from "@multica/ui/components/ui/button";
 import { cn } from "@multica/ui/lib/utils";
 import { GoalPanorama } from "./goal-panorama";
 import { GoalTimeline } from "./goal-timeline";
+import { GoalFormDialog } from "./goal-form-dialog";
 
 const VIEWS = ["panorama", "timeline"] as const;
 type GoalView = (typeof VIEWS)[number];
@@ -35,6 +36,7 @@ export function GoalsPage() {
   const navigation = useNavigation();
   const urlView = navigation.searchParams.get("view");
   const view: GoalView = isGoalView(urlView) ? urlView : "panorama";
+  const [creating, setCreating] = useState(false);
 
   const selectView = useCallback(
     (next: GoalView) => {
@@ -52,7 +54,7 @@ export function GoalsPage() {
       <PageHeader>
         <h1 className="text-title-sm font-semibold">{t(($) => $.page.title)}</h1>
         <div className="flex-1" />
-        <Button size="sm" className="gap-1.5">
+        <Button size="sm" className="gap-1.5" onClick={() => setCreating(true)}>
           <Plus className="size-4" />
           {t(($) => $.page.new_goal)}
         </Button>
@@ -84,6 +86,11 @@ export function GoalsPage() {
 
         {view === "timeline" ? <GoalTimeline /> : <GoalPanorama />}
       </div>
+
+      {/* Mounted only while open. The dialog loads the project list to fill
+          its product picker, and a closed dialog that still fetches is a
+          request every reader of this page pays for a form nobody opened. */}
+      {creating && <GoalFormDialog open onOpenChange={setCreating} />}
     </div>
   );
 }

@@ -50,6 +50,26 @@ const (
 	EventInboxBatchRead     = "inbox:batch-read"
 	EventInboxBatchArchived = "inbox:batch-archived"
 
+	// Goal layer events.
+	//
+	// The goal tier is shared by everyone in a workspace — one person's plan is
+	// the next person's context — so every write here fans out. The client maps
+	// the `goal:` and `milestone:` prefixes to cache invalidation; nothing in
+	// this payload is mirrored into client state.
+	EventGoalCreated       = "goal:created"
+	EventGoalUpdated       = "goal:updated"
+	EventGoalDeleted       = "goal:deleted"
+	EventGoalIssuesChanged = "goal:issues_changed"
+
+	EventMilestoneCreated = "milestone:created"
+	// Covers both the state machine and a reschedule: to a reader of the board
+	// the two are the same event, "this milestone is not what it was".
+	EventMilestoneUpdated = "milestone:updated"
+	// An agent has claimed a milestone was reached. Broadcast so the claim
+	// reaches whoever is able to judge it, not only whoever happens to reload.
+	EventMilestoneProposed = "milestone:proposed"
+	EventMilestoneDecided  = "milestone:decided"
+
 	// Workspace events
 	EventWorkspaceUpdated = "workspace:updated"
 	EventWorkspaceDeleted = "workspace:deleted"

@@ -67,6 +67,16 @@ export type WSEventType =
   | "project:created"
   | "project:updated"
   | "project:deleted"
+  // Goal layer. The tier is shared by everyone in a workspace, so every write
+  // fans out; the client treats these as opaque refetch triggers.
+  | "goal:created"
+  | "goal:updated"
+  | "goal:deleted"
+  | "goal:issues_changed"
+  | "milestone:created"
+  | "milestone:updated"
+  | "milestone:proposed"
+  | "milestone:decided"
   | "squad:created"
   | "squad:updated"
   | "squad:deleted"
@@ -616,6 +626,14 @@ export interface WSEventPayloadMap {
   // currently consume as opaque triggers (refetch on receipt).
   "daemon:heartbeat": unknown;
   "daemon:register": unknown;
+  "goal:created": unknown;
+  "goal:updated": unknown;
+  "goal:deleted": unknown;
+  "goal:issues_changed": unknown;
+  "milestone:created": unknown;
+  "milestone:updated": unknown;
+  "milestone:proposed": unknown;
+  "milestone:decided": unknown;
   "skill:created": unknown;
   "skill:updated": unknown;
   "skill:deleted": unknown;

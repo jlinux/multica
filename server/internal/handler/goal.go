@@ -12,6 +12,7 @@ import (
 	goalrules "github.com/multica-ai/multica/server/internal/goal"
 	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
+	"github.com/multica-ai/multica/server/pkg/protocol"
 )
 
 type GoalResponse struct {
@@ -370,7 +371,10 @@ func (h *Handler) CreateGoal(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to create goal")
 		return
 	}
-	writeJSON(w, http.StatusCreated, goalToResponse(g))
+	resp := goalToResponse(g)
+	h.publish(protocol.EventGoalCreated, workspaceID, creatorType, creatorID,
+		map[string]any{"goal": resp})
+	writeJSON(w, http.StatusCreated, resp)
 }
 
 // resolveGoalRef loads a goal named in a request body, scoped to the caller's
@@ -592,7 +596,9 @@ func (h *Handler) UpdateGoal(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to update goal")
 		return
 	}
-	writeJSON(w, http.StatusOK, goalToResponse(g))
+	resp := goalToResponse(g)
+	h.publishGoalChange(r, protocol.EventGoalUpdated, map[string]any{"goal": resp})
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // DeleteGoal soft-deletes a goal and settles everything that pointed at it, in
@@ -656,6 +662,10 @@ func (h *Handler) DeleteGoal(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to delete goal")
 		return
 	}
+	// After the commit: a listener that refetched on an event the transaction
+	// then rolled back would show the goal as gone and bring it back.
+	h.publishGoalChange(r, protocol.EventGoalDeleted,
+		map[string]any{"goal_id": uuidToString(g.ID)})
 	writeJSON(w, http.StatusOK, map[string]any{"success": true})
 }
 
@@ -704,6 +714,10 @@ func (h *Handler) LinkGoalIssue(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to link issue")
 		return
 	}
+	h.publishGoalChange(r, protocol.EventGoalIssuesChanged, map[string]any{
+		"goal_id":  uuidToString(g.ID),
+		"issue_id": uuidToString(issue.ID),
+	})
 	writeJSON(w, http.StatusOK, map[string]any{"success": true})
 }
 
@@ -722,6 +736,10 @@ func (h *Handler) UnlinkGoalIssue(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to unlink issue")
 		return
 	}
+	h.publishGoalChange(r, protocol.EventGoalIssuesChanged, map[string]any{
+		"goal_id":  uuidToString(g.ID),
+		"issue_id": uuidToString(issueID),
+	})
 	writeJSON(w, http.StatusOK, map[string]any{"success": true})
 }
 
@@ -792,4 +810,20 @@ func (h *Handler) ListGoalsForIssue(w http.ResponseWriter, r *http.Request) {
 		resp[i] = goalToResponse(g)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"goals": resp, "total": len(resp)})
+}
+
+// publishGoalChange fans a goal-layer write out to everyone in the workspace.
+//
+// The goal tier is shared: one person's plan is the next person's context, and
+// a board that only updates for whoever made the change is a board two people
+// cannot use at once. Resolving the actor here rather than at each call site
+// keeps the attribution consistent — an agent's write is labelled as an
+// agent's write wherever it came from.
+func (h *Handler) publishGoalChange(r *http.Request, eventType string, payload map[string]any) {
+	workspaceID := h.resolveWorkspaceID(r)
+	if workspaceID == "" {
+		return
+	}
+	actorType, actorID := h.resolveActor(r, requestUserID(r), workspaceID)
+	h.publish(eventType, workspaceID, actorType, actorID, payload)
 }

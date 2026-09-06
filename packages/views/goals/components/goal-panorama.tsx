@@ -8,6 +8,7 @@ import { useWorkspaceId } from "@multica/core/hooks";
 import { useT } from "../../i18n";
 import { useWorkspacePaths } from "@multica/core/paths";
 import { rowLinkInteractiveProps, useRowLink } from "../../navigation";
+import { GoalFormDialog } from "./goal-form-dialog";
 import { Button } from "@multica/ui/components/ui/button";
 import { Badge } from "@multica/ui/components/ui/badge";
 import { Skeleton } from "@multica/ui/components/ui/skeleton";
@@ -391,6 +392,7 @@ function AlignmentSeparator({ label }: { label: string }) {
 
 function GoalsEmptyState() {
   const { t } = useT("goals");
+  const [creating, setCreating] = useState(false);
   return (
     <div className="mx-auto max-w-lg">
       <Empty>
@@ -401,11 +403,12 @@ function GoalsEmptyState() {
           <EmptyTitle>{t(($) => $.empty.title)}</EmptyTitle>
           <EmptyDescription>{t(($) => $.empty.description)}</EmptyDescription>
         </EmptyHeader>
-        <Button className="gap-1.5">
+        <Button className="gap-1.5" onClick={() => setCreating(true)}>
           <Plus className="size-4" />
           {t(($) => $.empty.action)}
         </Button>
       </Empty>
+      {creating && <GoalFormDialog open onOpenChange={setCreating} />}
       {/* Says out loud that one tier is the starting point, so the reader is
           not left wondering where the rest of the model went. */}
       <p className="mt-2 text-center text-caption text-faint-foreground">

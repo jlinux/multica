@@ -5,6 +5,7 @@ import (
 	"errors"
 	"math/rand/v2"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -127,6 +128,87 @@ func TestWorkspaceScopeGuard(t *testing.T) {
 			t.Fatalf("in-workspace DeleteIssue did not remove the row")
 		}
 	})
+
+	// Goal layer. Everyone in a workspace shares its plan, which is exactly why
+	// nobody outside it may read or move a single row: the tier is the most
+	// context-dense thing the product stores, and one leaked goal title states
+	// another company's roadmap.
+	t.Run("GetGoalInWorkspace", func(t *testing.T) {
+		id := seedGoal(t, ctx)
+		t.Cleanup(func() { testPool.Exec(ctx, `DELETE FROM goal WHERE id = $1`, util.UUIDToString(id)) })
+
+		if _, err := queries.GetGoalInWorkspace(ctx, db.GetGoalInWorkspaceParams{ID: id, WorkspaceID: wsB}); !errors.Is(err, pgx.ErrNoRows) {
+			t.Fatalf("cross-workspace GetGoalInWorkspace: expected pgx.ErrNoRows, got %v", err)
+		}
+	})
+
+	t.Run("UpdateGoal", func(t *testing.T) {
+		id := seedGoal(t, ctx)
+		t.Cleanup(func() { testPool.Exec(ctx, `DELETE FROM goal WHERE id = $1`, util.UUIDToString(id)) })
+
+		_, err := queries.UpdateGoal(ctx, db.UpdateGoalParams{
+			ID:          id,
+			WorkspaceID: wsB,
+			Title:       pgtype.Text{String: "hijacked", Valid: true},
+		})
+		if !errors.Is(err, pgx.ErrNoRows) {
+			t.Fatalf("cross-workspace UpdateGoal: expected pgx.ErrNoRows, got %v", err)
+		}
+		var title string
+		if err := testPool.QueryRow(ctx, `SELECT title FROM goal WHERE id = $1`, util.UUIDToString(id)).Scan(&title); err != nil {
+			t.Fatalf("read back goal: %v", err)
+		}
+		if title != "scope-guard test goal" {
+			t.Fatalf("title = %q, want it untouched by the foreign-workspace write", title)
+		}
+	})
+
+	t.Run("SoftDeleteGoal", func(t *testing.T) {
+		id := seedGoal(t, ctx)
+		t.Cleanup(func() { testPool.Exec(ctx, `DELETE FROM goal WHERE id = $1`, util.UUIDToString(id)) })
+
+		if err := queries.SoftDeleteGoal(ctx, db.SoftDeleteGoalParams{ID: id, WorkspaceID: wsB}); err != nil {
+			t.Fatalf("cross-workspace SoftDeleteGoal: expected nil error (no-op), got %v", err)
+		}
+		var deletedAt pgtype.Timestamptz
+		if err := testPool.QueryRow(ctx, `SELECT deleted_at FROM goal WHERE id = $1`, util.UUIDToString(id)).Scan(&deletedAt); err != nil {
+			t.Fatalf("read back goal: %v", err)
+		}
+		if deletedAt.Valid {
+			t.Fatal("a foreign workspace soft-deleted the goal")
+		}
+	})
+
+	t.Run("GetMilestoneInWorkspace", func(t *testing.T) {
+		goalID := seedGoal(t, ctx)
+		id := seedMilestoneFor(t, ctx, goalID)
+		t.Cleanup(func() {
+			testPool.Exec(ctx, `DELETE FROM milestone WHERE id = $1`, util.UUIDToString(id))
+			testPool.Exec(ctx, `DELETE FROM goal WHERE id = $1`, util.UUIDToString(goalID))
+		})
+
+		if _, err := queries.GetMilestoneInWorkspace(ctx, db.GetMilestoneInWorkspaceParams{ID: id, WorkspaceID: wsB}); !errors.Is(err, pgx.ErrNoRows) {
+			t.Fatalf("cross-workspace GetMilestoneInWorkspace: expected pgx.ErrNoRows, got %v", err)
+		}
+	})
+
+	t.Run("RescheduleMilestone", func(t *testing.T) {
+		goalID := seedGoal(t, ctx)
+		id := seedMilestoneFor(t, ctx, goalID)
+		t.Cleanup(func() {
+			testPool.Exec(ctx, `DELETE FROM milestone WHERE id = $1`, util.UUIDToString(id))
+			testPool.Exec(ctx, `DELETE FROM goal WHERE id = $1`, util.UUIDToString(goalID))
+		})
+
+		_, err := queries.RescheduleMilestone(ctx, db.RescheduleMilestoneParams{
+			ID:          id,
+			WorkspaceID: wsB,
+			PlannedDate: pgtype.Date{Time: time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC), Valid: true},
+		})
+		if !errors.Is(err, pgx.ErrNoRows) {
+			t.Fatalf("cross-workspace RescheduleMilestone: expected pgx.ErrNoRows, got %v", err)
+		}
+	})
 }
 
 // ---- seed helpers (resource lives in testWorkspaceID) ----
@@ -204,6 +286,38 @@ func seedChatSession(t *testing.T, ctx context.Context) pgtype.UUID {
 		RETURNING id
 	`, testWorkspaceID, agentID, testUserID).Scan(&s); err != nil {
 		t.Fatalf("seed chat_session: %v", err)
+	}
+	return parseUUID(s)
+}
+
+// seedGoal creates a cycle goal in the fixture workspace.
+func seedGoal(t *testing.T, ctx context.Context) pgtype.UUID {
+	t.Helper()
+	var s string
+	if err := testPool.QueryRow(ctx, `
+		INSERT INTO goal (workspace_id, level, title, status, created_by_type, created_by_id)
+		VALUES ($1, 3, 'scope-guard test goal', 'not_started', 'member', $2)
+		RETURNING id
+	`, testWorkspaceID, testUserID).Scan(&s); err != nil {
+		t.Fatalf("seed goal: %v", err)
+	}
+	return parseUUID(s)
+}
+
+func seedMilestoneFor(t *testing.T, ctx context.Context, goalID pgtype.UUID) pgtype.UUID {
+	t.Helper()
+	var s string
+	if err := testPool.QueryRow(ctx, `
+		INSERT INTO milestone (
+			workspace_id, goal_id, type, title,
+			original_planned_date, planned_date, status,
+			created_by_type, created_by_id
+		)
+		VALUES ($1, $2, 'launch', 'scope-guard test milestone',
+			DATE '2026-10-10', DATE '2026-10-10', 'planned', 'member', $3)
+		RETURNING id
+	`, testWorkspaceID, util.UUIDToString(goalID), testUserID).Scan(&s); err != nil {
+		t.Fatalf("seed milestone: %v", err)
 	}
 	return parseUUID(s)
 }

@@ -1,45 +1,4 @@
 {
-  "page": {
-    "title": "目标",
-    "subtitle": "方向、产品目标,以及这个阶段要交付什么",
-    "new_goal": "新建目标",
-    "loading": "正在加载目标"
-  },
-  "tier": {
-    "direction": "方向",
-    "direction_hint": "1–3 年",
-    "product": "产品目标",
-    "product_hint": "半年–1 年",
-    "cycle": "阶段目标",
-    "cycle_hint": "2 周–3 个月",
-    "aligns_to": "承接",
-    "count_other": "{{count}} 个目标"
-  },
-  "kind": {
-    "base": "基础产品",
-    "brk": "突破创新"
-  },
-  "status": {
-    "not_started": "未开始",
-    "in_progress": "进行中",
-    "at_risk": "有风险",
-    "done": "已完成",
-    "archived": "已归档"
-  },
-  "orphan": {
-    "section": "独立目标",
-    "hint": "这是有意为之,不是疏漏:临时性的工作,不该硬挂到某个大方向上",
-    "badge": "独立"
-  },
-  "warning": {
-    "unpicked": "还没有下层目标承接"
-  },
-  "milestone": {
-    "launch": "上线",
-    "first_use": "首次真实使用",
-    "nth_use": "持续使用",
-    "progress": "已达成 {{done}} / 3"
-  },
   "badge": {
     "retro": "事后补录",
     "continues": "延续前序目标"
@@ -48,36 +7,6 @@
     "clear": "取消高亮",
     "focus": "高亮这条承接链",
     "open": "打开目标"
-  },
-  "empty": {
-    "title": "还没有目标",
-    "description": "目标用来说明这一阶段要交付什么。设好之后,系统会一直追问下去:上线了吗?有人用了吗?还在用吗?",
-    "action": "创建第一个目标",
-    "footnote": "现在只有一层。等目标多起来、跨了几个项目,可以再加一层把它们归拢。"
-  },
-  "error": {
-    "title": "目标加载失败",
-    "retry": "重试"
-  },
-  "view": {
-    "panorama": "全景",
-    "timeline": "时间线"
-  },
-  "timeline": {
-    "empty_description": "目标有了里程碑之后就会出现在这里。先给每个目标定一个上线时间,之后再谈被使用。",
-    "empty_title": "路线图上还没有内容",
-    "gap_days_other": "{{count}} 天",
-    "legend_first_use": "首次真实使用",
-    "legend_launch": "上线",
-    "legend_moved": "最初计划的日期",
-    "legend_nth_use": "持续使用",
-    "legend_unused": "已上线,但没人用",
-    "moved_from": "原定 {{date}}",
-    "moved_times_other": "改期 {{count}} 次",
-    "no_product": "未关联产品",
-    "subtitle": "按产品铺开的里程碑。这张图要看的是标记之间的距离,不是长度。",
-    "today": "今天",
-    "unused_days_other": "上线 {{count}} 天,仍无人使用"
   },
   "detail": {
     "actual": "实际",
@@ -108,5 +37,138 @@
     "seam_title": "此目标不能指派给 agent",
     "unassigned": "未指派",
     "verifier": "验收人"
+  },
+  "empty": {
+    "title": "还没有目标",
+    "description": "目标用来说明这一阶段要交付什么。设好之后,系统会一直追问下去:上线了吗?有人用了吗?还在用吗?",
+    "action": "创建第一个目标",
+    "footnote": "现在只有一层。等目标多起来、跨了几个项目,可以再加一层把它们归拢。"
+  },
+  "error": {
+    "title": "目标加载失败",
+    "retry": "重试"
+  },
+  "form": {
+    "adoption": "采用如何判定",
+    "cancel": "取消",
+    "create_goal": "新建目标",
+    "create_goal_submit": "创建目标",
+    "create_milestone": "添加里程碑",
+    "create_milestone_submit": "添加",
+    "cycle": "周期",
+    "cycle_placeholder": "2026 下半年",
+    "description": "描述",
+    "due": "截止日期",
+    "kind": "类型",
+    "milestone_title_placeholder": "什么事会成立?",
+    "milestone_type": "阶段",
+    "nth": "第几次使用",
+    "orphan_reason": "为什么独立",
+    "orphan_reason_placeholder": "一句话就够",
+    "parent": "承接",
+    "parent_none": "不承接 —— 这是独立目标",
+    "planned_date": "计划日期",
+    "project": "产品",
+    "project_none": "选择产品",
+    "required": "必填",
+    "reschedule": "改期",
+    "reschedule_hint": "最初计划的日期会保留在里程碑上,达成率按它计算。",
+    "reschedule_reason": "原因",
+    "reschedule_reason_placeholder": "会留档;不用于追责",
+    "reschedule_submit": "确认改期",
+    "saving": "保存中…",
+    "tier": "层级",
+    "title": "标题",
+    "title_placeholder": "这个目标要交付什么?",
+    "value_statement": "这次交付的价值",
+    "value_statement_placeholder": "用使用者的语言写",
+    "verifier_label": "由谁确认",
+    "verifier_label_placeholder": "姓名或团队"
+  },
+  "issue_panel": {
+    "heading": "目标",
+    "hint": "这项工作在交付什么",
+    "none": "未关联目标",
+    "pending_other": "{{count}} 条来自这项工作的里程碑提议"
+  },
+  "kind": {
+    "base": "基础产品",
+    "brk": "突破创新"
+  },
+  "milestone": {
+    "launch": "上线",
+    "first_use": "首次真实使用",
+    "nth_use": "持续使用",
+    "progress": "已达成 {{done}} / 3"
+  },
+  "orphan": {
+    "section": "独立目标",
+    "hint": "这是有意为之,不是疏漏:临时性的工作,不该硬挂到某个大方向上",
+    "badge": "独立"
+  },
+  "page": {
+    "title": "目标",
+    "subtitle": "方向、产品目标,以及这个阶段要交付什么",
+    "new_goal": "新建目标",
+    "loading": "正在加载目标"
+  },
+  "proposal": {
+    "accept": "确认",
+    "accepting": "确认中…",
+    "conflict": "已经有人裁决过这一条了",
+    "decided_accepted": "已确认",
+    "decided_rejected": "已驳回",
+    "decided_superseded": "已被更新的提议取代",
+    "evidence": "依据",
+    "heading": "Agent 提议",
+    "human_only": "agent 不能确认自己的提议,必须由人裁决。",
+    "none": "还没有提议",
+    "note_placeholder": "补充说明(可选)",
+    "open_issue": "来自这个 issue",
+    "open_run": "打开对应的运行记录",
+    "proposed_by": "由 agent 提出",
+    "proposes_achieved": "提议这条已经达成",
+    "proposes_pending": "提议这条可以进入验收",
+    "reject": "驳回"
+  },
+  "status": {
+    "not_started": "未开始",
+    "in_progress": "进行中",
+    "at_risk": "有风险",
+    "done": "已完成",
+    "archived": "已归档"
+  },
+  "tier": {
+    "direction": "方向",
+    "direction_hint": "1–3 年",
+    "product": "产品目标",
+    "product_hint": "半年–1 年",
+    "cycle": "阶段目标",
+    "cycle_hint": "2 周–3 个月",
+    "aligns_to": "承接",
+    "count_other": "{{count}} 个目标"
+  },
+  "timeline": {
+    "empty_description": "目标有了里程碑之后就会出现在这里。先给每个目标定一个上线时间,之后再谈被使用。",
+    "empty_title": "路线图上还没有内容",
+    "gap_days_other": "{{count}} 天",
+    "legend_first_use": "首次真实使用",
+    "legend_launch": "上线",
+    "legend_moved": "最初计划的日期",
+    "legend_nth_use": "持续使用",
+    "legend_unused": "已上线,但没人用",
+    "moved_from": "原定 {{date}}",
+    "moved_times_other": "改期 {{count}} 次",
+    "no_product": "未关联产品",
+    "subtitle": "按产品铺开的里程碑。这张图要看的是标记之间的距离,不是长度。",
+    "today": "今天",
+    "unused_days_other": "上线 {{count}} 天,仍无人使用"
+  },
+  "view": {
+    "panorama": "全景",
+    "timeline": "时间线"
+  },
+  "warning": {
+    "unpicked": "还没有下层目标承接"
   }
 }

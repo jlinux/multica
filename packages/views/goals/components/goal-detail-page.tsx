@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
   Ban,
   CircleCheck,
+  CalendarClock,
   CircleDashed,
   Clock,
   Plus,
@@ -16,6 +17,8 @@ import {
   goalIssuesOptions,
   goalListOptions,
   goalMilestonesOptions,
+  pendingMilestoneProposalsOptions,
+  type MilestoneProposal,
   type Goal,
   type GoalIssue,
   type Milestone,
@@ -36,6 +39,9 @@ import {
   EmptyTitle,
 } from "@multica/ui/components/ui/empty";
 import { cn } from "@multica/ui/lib/utils";
+import { MilestoneProposalCard } from "./milestone-proposal-card";
+import { MilestoneFormDialog } from "./milestone-form-dialog";
+import { RescheduleDialog } from "./reschedule-dialog";
 
 /**
  * One goal: where it sits in the plan, what it has promised, and the work
@@ -53,14 +59,35 @@ export function GoalDetailPage({ goalId }: { goalId: string }) {
   const wsId = useWorkspaceId();
   const paths = useWorkspacePaths();
 
-  const [goalQuery, milestonesQuery, issuesQuery, allGoalsQuery] = useQueries({
-    queries: [
-      goalDetailOptions(wsId, goalId),
-      goalMilestonesOptions(wsId, goalId),
-      goalIssuesOptions(wsId, goalId),
-      goalListOptions(wsId),
-    ],
-  });
+  const [goalQuery, milestonesQuery, issuesQuery, allGoalsQuery, proposalsQuery] =
+    useQueries({
+      queries: [
+        goalDetailOptions(wsId, goalId),
+        goalMilestonesOptions(wsId, goalId),
+        goalIssuesOptions(wsId, goalId),
+        goalListOptions(wsId),
+        pendingMilestoneProposalsOptions(wsId),
+      ],
+    });
+
+  // Grouped from the workspace queue rather than fetched per milestone: the
+  // queue is an inbox bounded by what humans have not decided, already loaded
+  // once for the badge, and a request per milestone would turn one page into
+  // an N+1 for a list that is usually empty.
+  const [addingMilestone, setAddingMilestone] = useState(false);
+  // The milestone whose date is being moved, or null. Held here rather than in
+  // each row so only one reschedule dialog can ever be open.
+  const [rescheduling, setRescheduling] = useState<Milestone | null>(null);
+
+  const proposalsByMilestone = useMemo(() => {
+    const map = new Map<string, MilestoneProposal[]>();
+    for (const proposal of proposalsQuery.data ?? []) {
+      const list = map.get(proposal.milestone_id);
+      if (list) list.push(proposal);
+      else map.set(proposal.milestone_id, [proposal]);
+    }
+    return map;
+  }, [proposalsQuery.data]);
 
   const goal = goalQuery.data;
   const ancestors = useAlignmentChain(goal, allGoalsQuery.data);
@@ -122,7 +149,12 @@ export function GoalDetailPage({ goalId }: { goalId: string }) {
               title={t(($) => $.detail.milestones)}
               hint={t(($) => $.detail.milestones_hint)}
               action={
-                <Button variant="outline" size="sm" className="gap-1.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => setAddingMilestone(true)}
+                >
                   <Plus className="size-3.5" />
                   {t(($) => $.detail.add_milestone)}
                 </Button>
@@ -145,7 +177,13 @@ export function GoalDetailPage({ goalId }: { goalId: string }) {
             ) : (
               <div className="overflow-hidden rounded-lg border border-surface-border bg-surface">
                 {(milestonesQuery.data ?? []).map((milestone) => (
-                  <MilestoneRow key={milestone.id} milestone={milestone} />
+                  <MilestoneRow
+                    key={milestone.id}
+                    milestone={milestone}
+                    goalId={goalId}
+                    proposals={proposalsByMilestone.get(milestone.id) ?? []}
+                    onReschedule={() => setRescheduling(milestone)}
+                  />
                 ))}
               </div>
             )}
@@ -174,6 +212,20 @@ export function GoalDetailPage({ goalId }: { goalId: string }) {
           </div>
         )}
       </div>
+
+      {addingMilestone && (
+        <MilestoneFormDialog goalId={goalId} open onOpenChange={setAddingMilestone} />
+      )}
+      {rescheduling && (
+        <RescheduleDialog
+          milestone={rescheduling}
+          goalId={goalId}
+          open
+          onOpenChange={(next) => {
+            if (!next) setRescheduling(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -341,7 +393,17 @@ function SectionHeading({
 
 const MILESTONE_ORDER = { launch: 0, first_use: 1, nth_use: 2 } as const;
 
-function MilestoneRow({ milestone }: { milestone: Milestone }) {
+function MilestoneRow({
+  milestone,
+  goalId,
+  proposals,
+  onReschedule,
+}: {
+  milestone: Milestone;
+  goalId: string;
+  proposals: MilestoneProposal[];
+  onReschedule: () => void;
+}) {
   const { t } = useT("goals");
   const typeKey =
     milestone.type in MILESTONE_ORDER
@@ -404,6 +466,19 @@ function MilestoneRow({ milestone }: { milestone: Milestone }) {
               {t(($) => $.timeline.moved_times, { count: milestone.date_change_count })}
             </span>
           ) : null}
+          {/* The control sits with the date it moves. A reschedule buried in a
+              row menu is one the owner does not find, and an unmoved overdue
+              date is worse for the record than a moved one with a reason. */}
+          {!achieved && (
+            <button
+              type="button"
+              onClick={onReschedule}
+              className="inline-flex items-center gap-1 rounded text-brand hover:underline"
+            >
+              <CalendarClock className="size-3" aria-hidden />
+              {t(($) => $.form.reschedule)}
+            </button>
+          )}
           {milestone.verifier_label ? (
             <span>
               {t(($) => $.detail.verifier)} {milestone.verifier_label}
@@ -425,6 +500,21 @@ function MilestoneRow({ milestone }: { milestone: Milestone }) {
             {milestone.value_statement}
           </p>
         ) : null}
+
+        {/* Claims waiting on a person, on the row they are about. A reviewer
+            who has to go somewhere else to find them will not find them. */}
+        {proposals.length > 0 && (
+          <div className="mt-2 space-y-1.5">
+            {proposals.map((proposal) => (
+              <MilestoneProposalCard
+                key={proposal.id}
+                proposal={proposal}
+                milestoneId={milestone.id}
+                goalId={goalId}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
