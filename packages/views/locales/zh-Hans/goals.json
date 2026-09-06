@@ -56,5 +56,25 @@
   "error": {
     "title": "目标加载失败",
     "retry": "重试"
+  },
+  "view": {
+    "panorama": "全景",
+    "timeline": "时间线"
+  },
+  "timeline": {
+    "empty_description": "目标有了里程碑之后就会出现在这里。先给每个目标定一个上线时间,之后再谈被使用。",
+    "empty_title": "路线图上还没有内容",
+    "gap_days_other": "{{count}} 天",
+    "legend_first_use": "首次真实使用",
+    "legend_launch": "上线",
+    "legend_moved": "最初计划的日期",
+    "legend_nth_use": "持续使用",
+    "legend_unused": "已上线,但没人用",
+    "moved_from": "原定 {{date}}",
+    "moved_times_other": "改期 {{count}} 次",
+    "no_product": "未关联产品",
+    "subtitle": "按产品铺开的里程碑。这张图要看的是标记之间的距离,不是长度。",
+    "today": "今天",
+    "unused_days_other": "上线 {{count}} 天,仍无人使用"
   }
 }

@@ -56,5 +56,25 @@
   "error": {
     "title": "목표를 불러오지 못했습니다",
     "retry": "다시 시도"
+  },
+  "view": {
+    "panorama": "파노라마",
+    "timeline": "타임라인"
+  },
+  "timeline": {
+    "empty_description": "목표에 마일스톤이 생기면 여기에 나타납니다. 먼저 출시일을 정하고, 사용은 그다음입니다.",
+    "empty_title": "로드맵에 아직 아무것도 없습니다",
+    "gap_days_other": "{{count}}일",
+    "legend_first_use": "첫 실사용",
+    "legend_launch": "출시",
+    "legend_moved": "처음 계획했던 날짜",
+    "legend_nth_use": "지속 사용",
+    "legend_unused": "출시됨, 아무도 쓰지 않음",
+    "moved_from": "원래 {{date}}",
+    "moved_times_other": "{{count}}회 변경",
+    "no_product": "제품 없음",
+    "subtitle": "제품별로 펼친 마일스톤. 여기서 중요한 것은 표시 사이의 거리이지 길이가 아닙니다.",
+    "today": "오늘",
+    "unused_days_other": "출시 {{count}}일째, 아직 미사용"
   }
 }

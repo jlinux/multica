@@ -3,7 +3,7 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Goal } from "@multica/core/goals";
 import { renderWithI18n } from "../../test/i18n";
-import { GoalsPage } from "./goals-page";
+import { GoalPanorama } from "./goal-panorama";
 
 const mocks = vi.hoisted(() => ({
   goals: [] as Goal[],
@@ -84,13 +84,13 @@ beforeEach(() => {
   mocks.isError = false;
 });
 
-describe("GoalsPage", () => {
+describe("GoalPanorama", () => {
   it("renders one band per tier that actually holds goals", () => {
     // A workspace that has only started filing cycle goals sees one band, not
     // three labelled voids. Opening on the whole empty model is what makes a
     // first-time reader close the tab, so absent tiers stay absent.
     mocks.goals = [goal({ id: "c1", title: "Console 2.1" })];
-    renderWithI18n(<GoalsPage />);
+    renderWithI18n(<GoalPanorama />);
 
     expect(screen.getByText("Cycle goals")).toBeInTheDocument();
     expect(screen.queryByText("Direction")).not.toBeInTheDocument();
@@ -98,7 +98,7 @@ describe("GoalsPage", () => {
   });
 
   it("shows an empty state instead of empty bands when there is nothing at all", () => {
-    renderWithI18n(<GoalsPage />);
+    renderWithI18n(<GoalPanorama />);
 
     expect(screen.getByText("No goals yet")).toBeInTheDocument();
     expect(screen.queryByText("Cycle goals")).not.toBeInTheDocument();
@@ -121,7 +121,7 @@ describe("GoalsPage", () => {
         orphan_reason: "One-off request; no lasting product line.",
       }),
     ];
-    renderWithI18n(<GoalsPage />);
+    renderWithI18n(<GoalPanorama />);
 
     const section = screen.getByRole("heading", { name: "Unaligned goals" });
     expect(section).toBeInTheDocument();
@@ -139,7 +139,7 @@ describe("GoalsPage", () => {
       goal({ id: "c1", title: "Console 2.1" }),
       goal({ id: "c2", title: "Billing v1" }),
     ];
-    renderWithI18n(<GoalsPage />);
+    renderWithI18n(<GoalPanorama />);
 
     expect(screen.getByText("Cycle goals")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Unaligned goals" })).not.toBeInTheDocument();
@@ -151,7 +151,7 @@ describe("GoalsPage", () => {
       goal({ id: "d2", level: 1, title: "Carried direction", child_count: 1 }),
       goal({ id: "c1", title: "Leaf cycle goal", parent_goal_id: "d2", child_count: 0 }),
     ];
-    renderWithI18n(<GoalsPage />);
+    renderWithI18n(<GoalPanorama />);
 
     const warnings = screen.getAllByText("Nothing is picking this up yet");
     expect(warnings).toHaveLength(1);
@@ -168,7 +168,7 @@ describe("GoalsPage", () => {
       goal({ id: "d2", level: 1, title: "Unrelated direction", child_count: 1 }),
       goal({ id: "p2", level: 2, title: "Unrelated product", kind: "brk", parent_goal_id: "d2" }),
     ];
-    renderWithI18n(<GoalsPage />);
+    renderWithI18n(<GoalPanorama />);
 
     await user.click(cardFor("Console rebuild"));
 
@@ -186,7 +186,7 @@ describe("GoalsPage", () => {
   it("keeps the selected card distinguishable by something hover does not touch", async () => {
     const user = userEvent.setup();
     mocks.goals = alignedTree();
-    renderWithI18n(<GoalsPage />);
+    renderWithI18n(<GoalPanorama />);
 
     const card = cardFor("Console rebuild");
     await user.click(card);
@@ -201,7 +201,7 @@ describe("GoalsPage", () => {
   it("clears the highlight when the same goal is clicked again", async () => {
     const user = userEvent.setup();
     mocks.goals = alignedTree();
-    renderWithI18n(<GoalsPage />);
+    renderWithI18n(<GoalPanorama />);
 
     const card = cardFor("Console rebuild");
     await user.click(card);
@@ -220,7 +220,7 @@ describe("GoalsPage", () => {
     mocks.goals = [
       goal({ id: "c1", title: "Orphaned by paging", parent_goal_id: "missing-parent" }),
     ];
-    renderWithI18n(<GoalsPage />);
+    renderWithI18n(<GoalPanorama />);
 
     await user.click(cardFor("Orphaned by paging"));
     expect(cardFor("Orphaned by paging")).toHaveAttribute("aria-pressed", "true");
@@ -228,14 +228,14 @@ describe("GoalsPage", () => {
 
   it("renders an accessible busy state while loading", () => {
     mocks.isPending = true;
-    renderWithI18n(<GoalsPage />);
+    renderWithI18n(<GoalPanorama />);
     expect(screen.getByLabelText("Loading goals")).toHaveAttribute("aria-busy");
   });
 
   it("offers a retry rather than a blank page when the request fails", async () => {
     const user = userEvent.setup();
     mocks.isError = true;
-    renderWithI18n(<GoalsPage />);
+    renderWithI18n(<GoalPanorama />);
 
     await user.click(screen.getByRole("button", { name: "Try again" }));
     expect(mocks.refetch).toHaveBeenCalled();
@@ -243,8 +243,8 @@ describe("GoalsPage", () => {
 
   it("renders localized copy", () => {
     mocks.goals = [goal({ id: "c1", title: "控制台 2.1" })];
-    renderWithI18n(<GoalsPage />, { locale: "zh-Hans" });
+    renderWithI18n(<GoalPanorama />, { locale: "zh-Hans" });
     expect(screen.getByText("阶段目标")).toBeInTheDocument();
-    expect(screen.getByText("新建目标")).toBeInTheDocument();
+    expect(screen.getByText("方向、产品目标,以及这个阶段要交付什么")).toBeInTheDocument();
   });
 });

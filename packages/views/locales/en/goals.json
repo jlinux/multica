@@ -57,5 +57,28 @@
   "error": {
     "title": "Could not load goals",
     "retry": "Try again"
+  },
+  "view": {
+    "panorama": "Panorama",
+    "timeline": "Timeline"
+  },
+  "timeline": {
+    "empty_description": "Milestones appear here once a goal has one. Every goal gets a launch date first; adoption follows.",
+    "empty_title": "Nothing on the roadmap yet",
+    "gap_days_one": "{{count}} day",
+    "gap_days_other": "{{count}} days",
+    "legend_first_use": "First real use",
+    "legend_launch": "Launch",
+    "legend_moved": "Where it was first planned",
+    "legend_nth_use": "Still in use",
+    "legend_unused": "Shipped, nobody using it",
+    "moved_from": "Was {{date}}",
+    "moved_times_one": "Moved once",
+    "moved_times_other": "Moved {{count}} times",
+    "no_product": "No product",
+    "subtitle": "Milestones laid out by product. What matters here is the distance between marks, not their length.",
+    "today": "Today",
+    "unused_days_one": "Shipped {{count}} day ago, still unused",
+    "unused_days_other": "Shipped {{count}} days ago, still unused"
   }
 }

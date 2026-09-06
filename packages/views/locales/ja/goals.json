@@ -56,5 +56,25 @@
   "error": {
     "title": "ゴールを読み込めませんでした",
     "retry": "再試行"
+  },
+  "view": {
+    "panorama": "パノラマ",
+    "timeline": "タイムライン"
+  },
+  "timeline": {
+    "empty_description": "ゴールにマイルストーンが付くとここに表示されます。まずはリリース日を決め、利用はその後です。",
+    "empty_title": "ロードマップにまだ何もありません",
+    "gap_days_other": "{{count}} 日",
+    "legend_first_use": "最初の実利用",
+    "legend_launch": "リリース",
+    "legend_moved": "最初に計画した日",
+    "legend_nth_use": "継続利用",
+    "legend_unused": "リリース済み、利用者なし",
+    "moved_from": "当初 {{date}}",
+    "moved_times_other": "{{count}} 回変更",
+    "no_product": "プロダクト未設定",
+    "subtitle": "プロダクト別に並べたマイルストーン。見るべきは印の間隔であって、長さではありません。",
+    "today": "今日",
+    "unused_days_other": "リリースから {{count}} 日、まだ未利用"
   }
 }
