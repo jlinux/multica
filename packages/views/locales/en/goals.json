@@ -1,0 +1,61 @@
+{
+  "page": {
+    "title": "Goals",
+    "subtitle": "Direction, product goals, and what this cycle delivers",
+    "new_goal": "New goal",
+    "loading": "Loading goals"
+  },
+  "tier": {
+    "direction": "Direction",
+    "direction_hint": "1–3 years",
+    "product": "Product goals",
+    "product_hint": "6–12 months",
+    "cycle": "Cycle goals",
+    "cycle_hint": "2 weeks – 3 months",
+    "aligns_to": "aligns to",
+    "count_one": "{{count}} goal",
+    "count_other": "{{count}} goals"
+  },
+  "kind": {
+    "base": "Sustain",
+    "brk": "Explore"
+  },
+  "status": {
+    "not_started": "Not started",
+    "in_progress": "In progress",
+    "at_risk": "At risk",
+    "done": "Done",
+    "archived": "Archived"
+  },
+  "orphan": {
+    "section": "Unaligned goals",
+    "hint": "Deliberate, not a mistake: one-off work that no direction should have to adopt",
+    "badge": "Unaligned"
+  },
+  "warning": {
+    "unpicked": "Nothing is picking this up yet"
+  },
+  "milestone": {
+    "launch": "Launch",
+    "first_use": "First real use",
+    "nth_use": "Still in use",
+    "progress": "{{done}} of 3 reached"
+  },
+  "badge": {
+    "retro": "Recorded after the fact",
+    "continues": "Continues an earlier goal"
+  },
+  "chain": {
+    "clear": "Clear highlight"
+  },
+  "empty": {
+    "title": "No goals yet",
+    "description": "A goal says what this stretch of work delivers. Once it is set, the system keeps asking: did it ship, did anyone use it, are they still using it?",
+    "action": "Create the first goal",
+    "footnote": "One tier for now. When goals pile up across projects, you can add a tier to group them."
+  },
+  "error": {
+    "title": "Could not load goals",
+    "retry": "Try again"
+  }
+}

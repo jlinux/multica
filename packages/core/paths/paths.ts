@@ -31,6 +31,10 @@ function workspaceScoped(slug: string) {
     issueDetail: (id: string) => `${ws}/issues/${encode(id)}`,
     projects: () => `${ws}/projects`,
     projectDetail: (id: string) => `${ws}/projects/${encode(id)}`,
+    // The planning tier above issues. Goals are never assignable, so this
+    // route never leads anywhere an agent can be handed work.
+    goals: () => `${ws}/goals`,
+    goalDetail: (id: string) => `${ws}/goals/${encode(id)}`,
     autopilots: () => `${ws}/autopilots`,
     autopilotDetail: (id: string) => `${ws}/autopilots/${encode(id)}`,
     agents: () => `${ws}/agents`,

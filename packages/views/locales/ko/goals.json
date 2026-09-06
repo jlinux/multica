@@ -1,0 +1,60 @@
+{
+  "page": {
+    "title": "목표",
+    "subtitle": "방향, 제품 목표, 그리고 이번 주기에 전달할 것",
+    "new_goal": "목표 만들기",
+    "loading": "목표를 불러오는 중"
+  },
+  "tier": {
+    "direction": "방향",
+    "direction_hint": "1~3년",
+    "product": "제품 목표",
+    "product_hint": "6개월~1년",
+    "cycle": "주기 목표",
+    "cycle_hint": "2주~3개월",
+    "aligns_to": "연결 대상",
+    "count_other": "{{count}}개"
+  },
+  "kind": {
+    "base": "기반 강화",
+    "brk": "신규 개척"
+  },
+  "status": {
+    "not_started": "시작 전",
+    "in_progress": "진행 중",
+    "at_risk": "위험",
+    "done": "완료",
+    "archived": "보관됨"
+  },
+  "orphan": {
+    "section": "독립 목표",
+    "hint": "실수가 아니라 의도된 것입니다. 일회성 작업을 억지로 방향에 붙일 필요는 없습니다",
+    "badge": "독립"
+  },
+  "warning": {
+    "unpicked": "아직 이어받는 하위 목표가 없습니다"
+  },
+  "milestone": {
+    "launch": "출시",
+    "first_use": "첫 실사용",
+    "nth_use": "지속 사용",
+    "progress": "3개 중 {{done}}개 달성"
+  },
+  "badge": {
+    "retro": "사후 기록",
+    "continues": "이전 목표의 연속"
+  },
+  "chain": {
+    "clear": "강조 해제"
+  },
+  "empty": {
+    "title": "아직 목표가 없습니다",
+    "description": "목표는 이번 구간에 무엇을 전달하는지를 말합니다. 설정하면 시스템이 계속 묻습니다: 출시했는가, 누가 썼는가, 지금도 쓰고 있는가?",
+    "action": "첫 목표 만들기",
+    "footnote": "지금은 한 계층뿐입니다. 여러 프로젝트에 목표가 쌓이면 묶는 계층을 추가할 수 있습니다."
+  },
+  "error": {
+    "title": "목표를 불러오지 못했습니다",
+    "retry": "다시 시도"
+  }
+}

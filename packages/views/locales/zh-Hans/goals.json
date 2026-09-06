@@ -1,0 +1,60 @@
+{
+  "page": {
+    "title": "目标",
+    "subtitle": "方向、产品目标,以及这个阶段要交付什么",
+    "new_goal": "新建目标",
+    "loading": "正在加载目标"
+  },
+  "tier": {
+    "direction": "方向",
+    "direction_hint": "1–3 年",
+    "product": "产品目标",
+    "product_hint": "半年–1 年",
+    "cycle": "阶段目标",
+    "cycle_hint": "2 周–3 个月",
+    "aligns_to": "承接",
+    "count_other": "{{count}} 个目标"
+  },
+  "kind": {
+    "base": "基础产品",
+    "brk": "突破创新"
+  },
+  "status": {
+    "not_started": "未开始",
+    "in_progress": "进行中",
+    "at_risk": "有风险",
+    "done": "已完成",
+    "archived": "已归档"
+  },
+  "orphan": {
+    "section": "独立目标",
+    "hint": "这是有意为之,不是疏漏:临时性的工作,不该硬挂到某个大方向上",
+    "badge": "独立"
+  },
+  "warning": {
+    "unpicked": "还没有下层目标承接"
+  },
+  "milestone": {
+    "launch": "上线",
+    "first_use": "首次真实使用",
+    "nth_use": "持续使用",
+    "progress": "已达成 {{done}} / 3"
+  },
+  "badge": {
+    "retro": "事后补录",
+    "continues": "延续前序目标"
+  },
+  "chain": {
+    "clear": "取消高亮"
+  },
+  "empty": {
+    "title": "还没有目标",
+    "description": "目标用来说明这一阶段要交付什么。设好之后,系统会一直追问下去:上线了吗?有人用了吗?还在用吗?",
+    "action": "创建第一个目标",
+    "footnote": "现在只有一层。等目标多起来、跨了几个项目,可以再加一层把它们归拢。"
+  },
+  "error": {
+    "title": "目标加载失败",
+    "retry": "重试"
+  }
+}
