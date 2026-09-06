@@ -423,7 +423,10 @@ func (h *Handler) UpdateMilestoneStatus(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusInternalServerError, "failed to update milestone")
 		return
 	}
-	writeJSON(w, http.StatusOK, milestoneToResponse(updated))
+	// Through milestoneResponses, not the bare mapper: a client that renders
+	// from the mutation response has to see the same milestone the next GET
+	// would give it, counters included.
+	writeJSON(w, http.StatusOK, h.milestoneResponses(r, wsUUID, []db.Milestone{updated})[0])
 }
 
 type RescheduleMilestoneRequest struct {
@@ -501,7 +504,10 @@ func (h *Handler) RescheduleMilestone(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to reschedule milestone")
 		return
 	}
-	writeJSON(w, http.StatusOK, milestoneToResponse(updated))
+	// Counted after the commit, so the "moved n times" badge the caller draws
+	// from this response already includes the move it just made. Reading it
+	// inside the transaction would return the pre-insert count.
+	writeJSON(w, http.StatusOK, h.milestoneResponses(r, wsUUID, []db.Milestone{updated})[0])
 }
 
 func (h *Handler) ListMilestoneDateChanges(w http.ResponseWriter, r *http.Request) {
@@ -979,7 +985,7 @@ func (h *Handler) DecideMilestoneProposal(w http.ResponseWriter, r *http.Request
 
 	resp := map[string]any{"proposal": proposalToResponse(decided)}
 	if state == goalrules.ProposalAccepted {
-		resp["milestone"] = milestoneToResponse(milestone)
+		resp["milestone"] = h.milestoneResponses(r, wsUUID, []db.Milestone{milestone})[0]
 	}
 	writeJSON(w, http.StatusOK, resp)
 }

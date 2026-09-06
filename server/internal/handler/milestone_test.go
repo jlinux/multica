@@ -106,6 +106,14 @@ func TestRescheduleRecordsTheReasonAndKeepsTheOriginalDate(t *testing.T) {
 			moved.OriginalPlannedDate)
 	}
 
+	// The badge is drawn from whatever the caller last received. A mutation
+	// response that omitted the counter would render "moved 0 times" directly
+	// after a move, and only correct itself on the next refetch.
+	if moved.DateChangeCount != 1 {
+		t.Errorf("date_change_count = %d, want 1: the reschedule response must already count the move it made",
+			moved.DateChangeCount)
+	}
+
 	var changes struct {
 		DateChanges []struct {
 			FromDate *string `json:"from_date"`
