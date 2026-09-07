@@ -8,6 +8,20 @@
     "focus": "Highlight this chain",
     "open": "Open goal"
   },
+  "cost": {
+    "by_provider": "By what ran",
+    "heading": "What this cost",
+    "hint": "Derived from the runs that delivered it — nothing here is entered by hand",
+    "issues": "Issues",
+    "no_spend": "No agent has run against this yet",
+    "rolled_up_one": "Rolled up from {{count}} goal",
+    "rolled_up_other": "Rolled up from {{count}} goals",
+    "runs": "Agent runs",
+    "spend": "Spend",
+    "uncosted_hint": "Shown rather than counted as free — unknown spend is not cheap spend",
+    "uncosted_one": "Plus {{count}} token the provider did not price",
+    "uncosted_other": "Plus {{count}} tokens the provider did not price"
+  },
   "detail": {
     "achieved_on": "Reached",
     "actual": "Landed",

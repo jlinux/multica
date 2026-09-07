@@ -8,6 +8,18 @@
     "focus": "高亮这条承接链",
     "open": "打开目标"
   },
+  "cost": {
+    "by_provider": "按运行的东西拆分",
+    "heading": "这个目标花了多少",
+    "hint": "由交付它的那些运行推导出来 —— 这里没有任何一项是手工录入的",
+    "issues": "关联 issue",
+    "no_spend": "还没有 agent 在这上面跑过",
+    "rolled_up_other": "汇总自 {{count}} 个目标",
+    "runs": "agent 运行",
+    "spend": "花费",
+    "uncosted_hint": "单独列出而不是当作免费 —— 花费未知不等于花费很低",
+    "uncosted_other": "另有 {{count}} 个 token 供应商未计价"
+  },
   "detail": {
     "achieved_on": "已达成",
     "actual": "实际",

@@ -17,6 +17,7 @@
   "tab": {
     "issue": "Issue",
     "project": "Project",
+    "goal": "Goal",
     "autopilot": "Autopilot",
     "agent": "Agent",
     "member": "Member",

@@ -14,6 +14,7 @@ import {
 } from "@multica/core/paths";
 import { issueDetailOptions } from "@multica/core/issues/queries";
 import { projectDetailOptions } from "@multica/core/projects/queries";
+import { goalDetailOptions } from "@multica/core/goals";
 import { autopilotDetailOptions } from "@multica/core/autopilots/queries";
 import {
   skillDetailOptions,
@@ -117,6 +118,10 @@ function useTabEntityData(subject: TabSubject, wsId: string): TabEntityData {
     ...projectDetailOptions(wsId, subject.kind === "project" ? subject.id : NONE),
     enabled: false,
   }).data;
+  const goal = useQuery({
+    ...goalDetailOptions(wsId, subject.kind === "goal" ? subject.id : NONE),
+    enabled: false,
+  }).data;
   const autopilot = useQuery({
     ...autopilotDetailOptions(
       wsId,
@@ -148,6 +153,9 @@ function useTabEntityData(subject: TabSubject, wsId: string): TabEntityData {
       break;
     case "project":
       if (project) data.project = { icon: project.icon, title: project.title };
+      break;
+    case "goal":
+      if (goal) data.goal = { title: goal.title };
       break;
     case "autopilot":
       if (autopilot) data.autopilot = { title: autopilot.autopilot.title };

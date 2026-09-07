@@ -17,6 +17,7 @@
   "tab": {
     "issue": "タスク",
     "project": "プロジェクト",
+    "goal": "ゴール",
     "autopilot": "オートパイロット",
     "agent": "エージェント",
     "member": "メンバー",

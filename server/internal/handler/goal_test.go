@@ -548,3 +548,135 @@ func TestRescheduleReasonsAreNotWorkspaceReadable(t *testing.T) {
 		t.Error("the dates are the record and must stay visible to everyone")
 	}
 }
+
+// The pair no other product-management tool can produce: what a plan cost,
+// derived from the runs that delivered it, with nothing recorded by hand.
+func TestGoalUsageRollsUpThroughTheTierBeneathIt(t *testing.T) {
+	if testHandler == nil {
+		t.Skip("no database")
+	}
+	direction := directionGoal(t, "Usage direction")
+	product := productGoal(t, "Usage product", direction.ID)
+	cycle := newGoal(t, map[string]any{
+		"level": 3, "title": "Usage cycle", "parent_goal_id": product.ID,
+	})
+
+	issueID := dbfx.Issue(t, "Work that cost something")
+	testutil.Call(t, testHandler.LinkGoalIssue,
+		withURLParam(newRequest("POST", "/api/goals/"+cycle.ID+"/issues", map[string]any{
+			"issue_id": issueID,
+		}), "id", cycle.ID)).Want(http.StatusOK)
+
+	agentID := dbfx.Agent(t, "usage-rollup-agent", testRuntimeID)
+	taskID := dbfx.Task(t, agentID, testutil.Cols{
+		"runtime_id": testRuntimeID, "issue_id": issueID,
+	})
+	dbfx.Insert(t, "task_usage", testutil.Cols{
+		"task_id": taskID, "provider": "anthropic", "model": "claude-opus",
+		"input_tokens": 1000, "output_tokens": 250, "cost_usd_ticks": 42_000_000_000,
+	})
+	// A second run the provider never priced. It must not silently read as
+	// free: a goal whose spend is unknown is not a goal that was cheap.
+	//
+	// A different agent, because one issue may hold only one pending task per
+	// agent — the same reason two agents on one issue is the normal shape.
+	agentID2 := dbfx.Agent(t, "usage-rollup-agent-2", testRuntimeID)
+	taskID2 := dbfx.Task(t, agentID2, testutil.Cols{
+		"runtime_id": testRuntimeID, "issue_id": issueID,
+	})
+	dbfx.Insert(t, "task_usage", testutil.Cols{
+		"task_id": taskID2, "provider": "openai", "model": "codex",
+		"input_tokens": 400, "output_tokens": 100,
+	})
+
+	read := func(goalID string) GoalUsageResponse {
+		var out GoalUsageResponse
+		testutil.Call(t, testHandler.GetGoalUsage,
+			withURLParam(newRequest("GET", "/api/goals/"+goalID+"/usage", nil), "id", goalID)).
+			Want(http.StatusOK).JSON(&out)
+		return out
+	}
+
+	own := read(cycle.ID)
+	if own.CostUsdTicks != 42_000_000_000 {
+		t.Errorf("cycle goal cost = %d ticks, want the priced run's 42_000_000_000", own.CostUsdTicks)
+	}
+	if own.AgentRuns != 2 {
+		t.Errorf("agent runs = %d, want both runs counted", own.AgentRuns)
+	}
+	if own.UncostedInputTokens != 400 || own.UncostedOutputTokens != 100 {
+		t.Errorf("uncosted tokens = %d/%d, want 400/100 reported separately rather than folded in as zero cost",
+			own.UncostedInputTokens, own.UncostedOutputTokens)
+	}
+
+	// The roll-up is the point. Without it an upper tier reports zero, which
+	// reads as free rather than as "ask the tier below".
+	for _, upper := range []struct{ name, id string }{
+		{"product goal", product.ID},
+		{"direction", direction.ID},
+	} {
+		got := read(upper.id)
+		if got.CostUsdTicks != own.CostUsdTicks {
+			t.Errorf("%s cost = %d, want the cycle goal's %d rolled up",
+				upper.name, got.CostUsdTicks, own.CostUsdTicks)
+		}
+		if got.Issues != 1 {
+			t.Errorf("%s covered %d issues, want the one beneath it", upper.name, got.Issues)
+		}
+	}
+	if read(direction.ID).Goals != 3 {
+		t.Errorf("the direction's roll-up must cover all three tiers, got %d goals",
+			read(direction.ID).Goals)
+	}
+
+	// Split by what ran, never by who ran it.
+	byProvider := read(cycle.ID).ByProvider
+	if len(byProvider) != 2 {
+		t.Fatalf("by_provider = %d rows, want one per provider/model", len(byProvider))
+	}
+	if byProvider[0].CostUsdTicks < byProvider[1].CostUsdTicks {
+		t.Error("the breakdown must lead with the most expensive")
+	}
+}
+
+// Clearing and omitting are different requests. Before this the endpoint could
+// only express one of them, so a goal that once had an owner could never lose
+// one — and the call returned success having changed nothing, which is worse
+// than refusing because the caller believes it worked.
+func TestNullableGoalFieldsCanBeCleared(t *testing.T) {
+	if testHandler == nil {
+		t.Skip("no database")
+	}
+	goal := newGoal(t, map[string]any{
+		"level": 3, "title": "Clearable", "orphan_reason": "Standalone for this test.",
+		"owner_type": "member", "owner_id": testUserID, "due_date": "2026-12-31",
+	})
+	if goal.OwnerID == nil || goal.DueDate == nil {
+		t.Fatalf("guard: the goal must start with both fields set, got owner=%v due=%v",
+			goal.OwnerID, goal.DueDate)
+	}
+
+	// Omitting them leaves them alone.
+	var untouched GoalResponse
+	testutil.Call(t, testHandler.UpdateGoal,
+		withURLParam(newRequest("PUT", "/api/goals/"+goal.ID, map[string]any{
+			"title": "Clearable, renamed",
+		}), "id", goal.ID)).Want(http.StatusOK).JSON(&untouched)
+	if untouched.OwnerID == nil || untouched.DueDate == nil {
+		t.Fatal("an edit that did not mention owner or due date must not clear them")
+	}
+
+	// An explicit empty string clears them, the same convention the alignment
+	// and continuation fields already use.
+	var cleared GoalResponse
+	testutil.Call(t, testHandler.UpdateGoal,
+		withURLParam(newRequest("PUT", "/api/goals/"+goal.ID, map[string]any{
+			"owner_type": "", "due_date": "",
+		}), "id", goal.ID)).Want(http.StatusOK).JSON(&cleared)
+	if cleared.OwnerType != nil || cleared.OwnerID != nil {
+		t.Errorf("owner = %v/%v, want both cleared", cleared.OwnerType, cleared.OwnerID)
+	}
+	if cleared.DueDate != nil {
+		t.Errorf("due_date = %v, want it cleared", cleared.DueDate)
+	}
+}

@@ -32,7 +32,8 @@ vi.mock("@tanstack/react-query", () => ({
     { data: mocks.allGoals, isPending: false, isError: false },
     { data: mocks.proposals, isPending: false, isError: false },
   ],
-  useQuery: () => ({ data: undefined }),
+  // The cost card uses useQuery; undefined means it renders nothing.
+  useQuery: () => ({ data: undefined, isPending: false, isError: false }),
 }));
 
 vi.mock("@multica/core/goals", () => ({
@@ -43,6 +44,7 @@ vi.mock("@multica/core/goals", () => ({
   pendingMilestoneProposalsOptions: () => ({ queryKey: ["proposals", "pending"] }),
   useDecideMilestoneProposal: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   useUpdateMilestoneStatus: () => ({ mutate: mocks.updateStatus, isPending: false, isError: false }),
+  goalUsageOptions: () => ({ queryKey: ["usage"] }),
 }));
 
 vi.mock("@multica/core/hooks", () => ({ useWorkspaceId: () => "workspace-1" }));

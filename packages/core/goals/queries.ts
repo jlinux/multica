@@ -32,6 +32,7 @@ export const goalKeys = {
   forIssueAll: (wsId: string) => [...goalKeys.all(wsId), "for-issue"] as const,
   forIssue: (wsId: string, issueId: string) =>
     [...goalKeys.forIssueAll(wsId), issueId] as const,
+  usage: (wsId: string, id: string) => [...goalKeys.all(wsId), "usage", id] as const,
   metrics: (wsId: string, cycle?: string) =>
     [...goalKeys.all(wsId), "metrics", cycle ?? ""] as const,
 };
@@ -72,6 +73,14 @@ export function goalDetailOptions(wsId: string, id: string) {
     queryKey: goalKeys.detail(wsId, id),
     queryFn: () => api.getGoal(id),
     enabled: id !== "",
+  });
+}
+
+export function goalUsageOptions(wsId: string, goalId: string) {
+  return queryOptions({
+    queryKey: goalKeys.usage(wsId, goalId),
+    queryFn: () => api.getGoalUsage(goalId),
+    enabled: goalId !== "",
   });
 }
 

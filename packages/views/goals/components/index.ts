@@ -3,6 +3,7 @@ export { GoalPanorama } from "./goal-panorama";
 export { GoalStatsStrip } from "./goal-stats-strip";
 export { GoalTimeline } from "./goal-timeline";
 export { GoalDetailPage } from "./goal-detail-page";
+export { GoalCostCard } from "./goal-cost-card";
 export { IssueGoalSection } from "./issue-goal-section";
 export { MilestoneProposalCard } from "./milestone-proposal-card";
 export { GoalFormDialog } from "./goal-form-dialog";

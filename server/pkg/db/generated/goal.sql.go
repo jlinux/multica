@@ -236,6 +236,91 @@ func (q *Queries) GetGoalInWorkspace(ctx context.Context, arg GetGoalInWorkspace
 	return i, err
 }
 
+const getGoalUsageSummary = `-- name: GetGoalUsageSummary :one
+WITH RECURSIVE goal_tree AS (
+    SELECT g.id FROM goal g
+    WHERE g.id = $1 AND g.workspace_id = $2 AND g.deleted_at IS NULL
+    UNION
+    SELECT child.id FROM goal child
+    JOIN goal_tree parent ON child.parent_goal_id = parent.id
+    WHERE child.workspace_id = $2 AND child.deleted_at IS NULL
+),
+tree_issues AS (
+    SELECT DISTINCT gi.issue_id
+    FROM goal_issue gi
+    JOIN goal_tree gt ON gt.id = gi.goal_id
+    WHERE gi.workspace_id = $2
+)
+SELECT
+    COALESCE(SUM(tu.input_tokens), 0)::bigint AS total_input_tokens,
+    COALESCE(SUM(tu.output_tokens), 0)::bigint AS total_output_tokens,
+    COALESCE(SUM(tu.cache_read_tokens), 0)::bigint AS total_cache_read_tokens,
+    COALESCE(SUM(tu.cache_write_tokens), 0)::bigint AS total_cache_write_tokens,
+    COALESCE(SUM(tu.cost_usd_ticks), 0)::bigint AS total_cost_usd_ticks,
+    COALESCE(SUM(tu.input_tokens)  FILTER (WHERE tu.cost_usd_ticks IS NULL), 0)::bigint AS uncosted_input_tokens,
+    COALESCE(SUM(tu.output_tokens) FILTER (WHERE tu.cost_usd_ticks IS NULL), 0)::bigint AS uncosted_output_tokens,
+    COUNT(DISTINCT tu.task_id)::bigint AS task_count,
+    (SELECT COUNT(*) FROM tree_issues)::bigint AS issue_count,
+    (SELECT COUNT(*) FROM goal_tree)::bigint AS goal_count
+FROM task_usage tu
+JOIN agent_task_queue atq ON atq.id = tu.task_id
+JOIN tree_issues ti ON ti.issue_id = atq.issue_id
+`
+
+type GetGoalUsageSummaryParams struct {
+	ID          pgtype.UUID `json:"id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+}
+
+type GetGoalUsageSummaryRow struct {
+	TotalInputTokens      int64 `json:"total_input_tokens"`
+	TotalOutputTokens     int64 `json:"total_output_tokens"`
+	TotalCacheReadTokens  int64 `json:"total_cache_read_tokens"`
+	TotalCacheWriteTokens int64 `json:"total_cache_write_tokens"`
+	TotalCostUsdTicks     int64 `json:"total_cost_usd_ticks"`
+	UncostedInputTokens   int64 `json:"uncosted_input_tokens"`
+	UncostedOutputTokens  int64 `json:"uncosted_output_tokens"`
+	TaskCount             int64 `json:"task_count"`
+	IssueCount            int64 `json:"issue_count"`
+	GoalCount             int64 `json:"goal_count"`
+}
+
+// What a goal has cost, rolled up through everything aligned beneath it.
+//
+// This is the number no other product-management tool can produce. The chain
+// already exists — task_usage -> agent_task_queue -> issue -> goal_issue ->
+// goal — so nothing here is recorded by hand: the cost of a plan is a
+// by-product of running it, and stays true whether or not anyone maintains it.
+// With the adoption milestones supplying the numerator, a goal finally has
+// both halves of a return.
+//
+// The roll-up is recursive because a direction's cost is the cost of the work
+// under it, and that work hangs off cycle goals two tiers down. Without the
+// recursion an upper-tier goal reports zero, which reads as free rather than
+// as "ask the tier below".
+//
+// cost_usd_ticks is the provider's own price at 1e-10 USD. Some runs arrive
+// unpriced, so the uncosted token totals come back alongside rather than being
+// silently folded in as zero: a goal whose spend is unknown must not render as
+// a goal that was cheap.
+func (q *Queries) GetGoalUsageSummary(ctx context.Context, arg GetGoalUsageSummaryParams) (GetGoalUsageSummaryRow, error) {
+	row := q.db.QueryRow(ctx, getGoalUsageSummary, arg.ID, arg.WorkspaceID)
+	var i GetGoalUsageSummaryRow
+	err := row.Scan(
+		&i.TotalInputTokens,
+		&i.TotalOutputTokens,
+		&i.TotalCacheReadTokens,
+		&i.TotalCacheWriteTokens,
+		&i.TotalCostUsdTicks,
+		&i.UncostedInputTokens,
+		&i.UncostedOutputTokens,
+		&i.TaskCount,
+		&i.IssueCount,
+		&i.GoalCount,
+	)
+	return i, err
+}
+
 const getWorkspaceGoalMetrics = `-- name: GetWorkspaceGoalMetrics :one
 WITH scoped_goals AS (
     SELECT g.id, g.workspace_id, g.level, g.title, g.description, g.parent_goal_id, g.orphan_reason, g.prev_goal_id, g.project_id, g.kind, g.status, g.owner_type, g.owner_id, g.cycle, g.due_date, g.is_retro, g.position, g.created_by_type, g.created_by_id, g.created_at, g.updated_at, g.deleted_at FROM goal g
@@ -464,6 +549,79 @@ func (q *Queries) ListGoalIssues(ctx context.Context, arg ListGoalIssuesParams) 
 			&i.AssigneeType,
 			&i.AssigneeID,
 			&i.LinkedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGoalUsageByProvider = `-- name: ListGoalUsageByProvider :many
+WITH RECURSIVE goal_tree AS (
+    SELECT g.id FROM goal g
+    WHERE g.id = $1 AND g.workspace_id = $2 AND g.deleted_at IS NULL
+    UNION
+    SELECT child.id FROM goal child
+    JOIN goal_tree parent ON child.parent_goal_id = parent.id
+    WHERE child.workspace_id = $2 AND child.deleted_at IS NULL
+),
+tree_issues AS (
+    SELECT DISTINCT gi.issue_id
+    FROM goal_issue gi
+    JOIN goal_tree gt ON gt.id = gi.goal_id
+    WHERE gi.workspace_id = $2
+)
+SELECT
+    tu.provider,
+    tu.model,
+    COALESCE(SUM(tu.cost_usd_ticks), 0)::bigint AS cost_usd_ticks,
+    COALESCE(SUM(tu.input_tokens + tu.output_tokens), 0)::bigint AS tokens,
+    COUNT(DISTINCT tu.task_id)::bigint AS task_count
+FROM task_usage tu
+JOIN agent_task_queue atq ON atq.id = tu.task_id
+JOIN tree_issues ti ON ti.issue_id = atq.issue_id
+GROUP BY tu.provider, tu.model
+ORDER BY cost_usd_ticks DESC, tokens DESC
+`
+
+type ListGoalUsageByProviderParams struct {
+	ID          pgtype.UUID `json:"id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+}
+
+type ListGoalUsageByProviderRow struct {
+	Provider     string `json:"provider"`
+	Model        string `json:"model"`
+	CostUsdTicks int64  `json:"cost_usd_ticks"`
+	Tokens       int64  `json:"tokens"`
+	TaskCount    int64  `json:"task_count"`
+}
+
+// The same roll-up, split by provider and model.
+//
+// Split by what ran, never by who ran it. Which CLI a goal's work went through
+// is an operational fact about tooling; attaching spend to a person is the
+// performance instrument this layer refuses to be, and the split is only
+// useful for the first question anyway.
+func (q *Queries) ListGoalUsageByProvider(ctx context.Context, arg ListGoalUsageByProviderParams) ([]ListGoalUsageByProviderRow, error) {
+	rows, err := q.db.Query(ctx, listGoalUsageByProvider, arg.ID, arg.WorkspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListGoalUsageByProviderRow{}
+	for rows.Next() {
+		var i ListGoalUsageByProviderRow
+		if err := rows.Scan(
+			&i.Provider,
+			&i.Model,
+			&i.CostUsdTicks,
+			&i.Tokens,
+			&i.TaskCount,
 		); err != nil {
 			return nil, err
 		}
@@ -708,11 +866,19 @@ UPDATE goal SET
     project_id = COALESCE($10, project_id),
     kind = COALESCE($11, kind),
     status = COALESCE($12, status),
-    owner_type = COALESCE($13, owner_type),
-    owner_id = COALESCE($14, owner_id),
-    cycle = COALESCE($15, cycle),
-    due_date = COALESCE($16, due_date),
-    position = COALESCE($17, position),
+    -- Clearing and omitting are different requests, and COALESCE alone can
+    -- only express one of them. A goal that once had an owner could never lose
+    -- one: JSON null arrives as an absent Go pointer, an empty string is
+    -- ignored, and the endpoint returned success having changed nothing —
+    -- which is worse than refusing, because the caller believes it worked.
+    owner_type = CASE WHEN $13::bool THEN NULL
+                      ELSE COALESCE($14, owner_type) END,
+    owner_id = CASE WHEN $13::bool THEN NULL
+                    ELSE COALESCE($15, owner_id) END,
+    cycle = COALESCE($16, cycle),
+    due_date = CASE WHEN $17::bool THEN NULL
+                    ELSE COALESCE($18, due_date) END,
+    position = COALESCE($19, position),
     updated_at = now()
 WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL
 RETURNING id, workspace_id, level, title, description, parent_goal_id, orphan_reason, prev_goal_id, project_id, kind, status, owner_type, owner_id, cycle, due_date, is_retro, position, created_by_type, created_by_id, created_at, updated_at, deleted_at
@@ -731,9 +897,11 @@ type UpdateGoalParams struct {
 	ProjectID    pgtype.UUID   `json:"project_id"`
 	Kind         pgtype.Text   `json:"kind"`
 	Status       pgtype.Text   `json:"status"`
+	ClearOwner   bool          `json:"clear_owner"`
 	OwnerType    pgtype.Text   `json:"owner_type"`
 	OwnerID      pgtype.UUID   `json:"owner_id"`
 	Cycle        pgtype.Text   `json:"cycle"`
+	ClearDueDate bool          `json:"clear_due_date"`
 	DueDate      pgtype.Date   `json:"due_date"`
 	Position     pgtype.Float8 `json:"position"`
 }
@@ -754,9 +922,11 @@ func (q *Queries) UpdateGoal(ctx context.Context, arg UpdateGoalParams) (Goal, e
 		arg.ProjectID,
 		arg.Kind,
 		arg.Status,
+		arg.ClearOwner,
 		arg.OwnerType,
 		arg.OwnerID,
 		arg.Cycle,
+		arg.ClearDueDate,
 		arg.DueDate,
 		arg.Position,
 	)

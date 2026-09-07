@@ -559,10 +559,22 @@ func (h *Handler) UpdateGoal(w http.ResponseWriter, r *http.Request) {
 		params.ProjectID = id
 		in.HasProject = true
 	}
+	// An explicit empty string clears the field; omitting it leaves the field
+	// alone. Same convention as parent_goal_id and prev_goal_id above, and for
+	// the same reason: JSON null cannot survive the round trip into an omitted
+	// Go pointer, so the intent has to be carried by a value the decoder keeps.
+	// Without it a goal that once had an owner could never lose one, and the
+	// endpoint returned success having changed nothing — worse than refusing,
+	// because the caller believes it worked.
 	if req.OwnerType != nil {
-		in.OwnerType = goalrules.ActorType(*req.OwnerType)
-		in.HasOwner = *req.OwnerType != ""
-		params.OwnerType = pgtype.Text{String: *req.OwnerType, Valid: in.HasOwner}
+		if *req.OwnerType == "" {
+			params.ClearOwner = true
+			in.HasOwner = false
+		} else {
+			in.OwnerType = goalrules.ActorType(*req.OwnerType)
+			in.HasOwner = true
+			params.OwnerType = pgtype.Text{String: *req.OwnerType, Valid: true}
+		}
 	}
 	if req.OwnerID != nil && *req.OwnerID != "" {
 		id, ok := parseUUIDOrBadRequest(w, *req.OwnerID, "owner_id")
@@ -571,13 +583,17 @@ func (h *Handler) UpdateGoal(w http.ResponseWriter, r *http.Request) {
 		}
 		params.OwnerID = id
 	}
-	if req.DueDate != nil && *req.DueDate != "" {
-		d, err := util.ParseCalendarDate(*req.DueDate)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid due_date format, expected YYYY-MM-DD")
-			return
+	if req.DueDate != nil {
+		if *req.DueDate == "" {
+			params.ClearDueDate = true
+		} else {
+			d, err := util.ParseCalendarDate(*req.DueDate)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "invalid due_date format, expected YYYY-MM-DD")
+				return
+			}
+			params.DueDate = d
 		}
-		params.DueDate = d
 	}
 
 	if params.ParentGoalID.Valid && params.ParentGoalID == current.ID {
@@ -939,4 +955,93 @@ func (h *Handler) GetGoalMetrics(w http.ResponseWriter, r *http.Request) {
 		RetroGoals:         row.RetroGoalCount,
 		OrphanGoals:        row.OrphanCount,
 	})
+}
+
+// GoalUsageResponse is what a goal has cost, rolled up through everything
+// aligned beneath it.
+//
+// The uncosted totals are separate on purpose. Some runs arrive without the
+// provider's price, and folding them in as zero would let a goal whose spend
+// is unknown render as a goal that was cheap — the one reading of this number
+// that would be actively misleading.
+type GoalUsageResponse struct {
+	// Ticks are 1e-10 USD, the unit the provider reports. Kept whole rather
+	// than divided here so no rounding happens before the client can show it.
+	CostUsdTicks int64 `json:"cost_usd_ticks"`
+	InputTokens  int64 `json:"input_tokens"`
+	OutputTokens int64 `json:"output_tokens"`
+	CacheRead    int64 `json:"cache_read_tokens"`
+	CacheWrite   int64 `json:"cache_write_tokens"`
+	// Tokens from runs the provider did not price. Shown, not folded in.
+	UncostedInputTokens  int64 `json:"uncosted_input_tokens"`
+	UncostedOutputTokens int64 `json:"uncosted_output_tokens"`
+	// What the roll-up covered, so a reader can tell an empty goal from a
+	// free one.
+	AgentRuns int64 `json:"agent_runs"`
+	Issues    int64 `json:"issues"`
+	Goals     int64 `json:"goals"`
+	// Split by what ran, never by who ran it.
+	ByProvider []GoalUsageProvider `json:"by_provider"`
+}
+
+type GoalUsageProvider struct {
+	Provider     string `json:"provider"`
+	Model        string `json:"model"`
+	CostUsdTicks int64  `json:"cost_usd_ticks"`
+	Tokens       int64  `json:"tokens"`
+	AgentRuns    int64  `json:"agent_runs"`
+}
+
+// GetGoalUsage reports the real spend behind a goal.
+//
+// Nothing here is recorded by hand: the chain from a token to a goal already
+// exists, so the cost of a plan is a by-product of running it and stays true
+// whether or not anyone maintains it. Together with the adoption milestones it
+// gives a goal both halves of a return — which is the pair no other
+// product-management tool can produce, because none of them own the execution.
+func (h *Handler) GetGoalUsage(w http.ResponseWriter, r *http.Request) {
+	g, wsUUID, ok := h.loadGoal(w, r)
+	if !ok {
+		return
+	}
+
+	summary, err := h.Queries.GetGoalUsageSummary(r.Context(), db.GetGoalUsageSummaryParams{
+		ID: g.ID, WorkspaceID: wsUUID,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load goal usage")
+		return
+	}
+
+	resp := GoalUsageResponse{
+		CostUsdTicks:         summary.TotalCostUsdTicks,
+		InputTokens:          summary.TotalInputTokens,
+		OutputTokens:         summary.TotalOutputTokens,
+		CacheRead:            summary.TotalCacheReadTokens,
+		CacheWrite:           summary.TotalCacheWriteTokens,
+		UncostedInputTokens:  summary.UncostedInputTokens,
+		UncostedOutputTokens: summary.UncostedOutputTokens,
+		AgentRuns:            summary.TaskCount,
+		Issues:               summary.IssueCount,
+		Goals:                summary.GoalCount,
+		ByProvider:           []GoalUsageProvider{},
+	}
+
+	// The breakdown is best-effort: it refines a number the caller already
+	// has, and losing it should not cost them the total.
+	if rows, err := h.Queries.ListGoalUsageByProvider(r.Context(), db.ListGoalUsageByProviderParams{
+		ID: g.ID, WorkspaceID: wsUUID,
+	}); err == nil {
+		for _, row := range rows {
+			resp.ByProvider = append(resp.ByProvider, GoalUsageProvider{
+				Provider:     row.Provider,
+				Model:        row.Model,
+				CostUsdTicks: row.CostUsdTicks,
+				Tokens:       row.Tokens,
+				AgentRuns:    row.TaskCount,
+			})
+		}
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }

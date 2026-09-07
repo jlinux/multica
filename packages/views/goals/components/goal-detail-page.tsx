@@ -41,6 +41,7 @@ import {
   EmptyTitle,
 } from "@multica/ui/components/ui/empty";
 import { cn } from "@multica/ui/lib/utils";
+import { GoalCostCard } from "./goal-cost-card";
 import { MilestoneProposalCard } from "./milestone-proposal-card";
 import { MilestoneFormDialog } from "./milestone-form-dialog";
 import { RescheduleDialog } from "./reschedule-dialog";
@@ -146,6 +147,13 @@ export function GoalDetailPage({ goalId }: { goalId: string }) {
             )}
 
             <SeamNotice />
+
+            {/* Under the seam notice on purpose: the sentence above says the
+                goal is not something an agent can be handed, and this is the
+                evidence of what the agents beneath it actually did. */}
+            <div className="mt-4">
+              <GoalCostCard goalId={goalId} />
+            </div>
 
             <SectionHeading
               title={t(($) => $.detail.milestones)}

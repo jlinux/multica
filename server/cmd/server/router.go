@@ -2000,6 +2000,9 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Delete("/issues/{issueId}", h.UnlinkGoalIssue)
 					r.Get("/milestones", h.ListGoalMilestones)
 					r.Post("/milestones", h.CreateMilestone)
+					// Real spend behind the goal, rolled up through everything
+					// aligned beneath it. Split by provider, never by person.
+					r.Get("/usage", h.GetGoalUsage)
 				})
 			})
 

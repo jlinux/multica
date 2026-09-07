@@ -248,6 +248,8 @@ import {
   GoalIssueListSchema,
   EMPTY_GOAL_METRICS,
   GoalMetricsSchema,
+  EMPTY_GOAL_USAGE,
+  GoalUsageSchema,
   GoalListSchema,
   GoalSchema,
   MilestoneDateChangeListSchema,
@@ -264,6 +266,7 @@ import type {
   Goal,
   GoalIssue,
   GoalMetrics,
+  GoalUsage,
   GoalListResponse,
   Milestone,
   MilestoneListResponse,
@@ -4826,6 +4829,17 @@ export class ApiClient {
 
   async deleteGoal(id: string): Promise<void> {
     await this.fetch(`/api/goals/${id}`, { method: "DELETE" });
+  }
+
+  /**
+   * Real spend behind a goal, rolled up through everything aligned beneath it.
+   * Split by provider, never by person.
+   */
+  async getGoalUsage(goalId: string): Promise<GoalUsage> {
+    const raw = await this.fetch<unknown>(`/api/goals/${goalId}/usage`);
+    return parseWithFallback(raw, GoalUsageSchema, EMPTY_GOAL_USAGE, {
+      endpoint: "GET /api/goals/:id/usage",
+    });
   }
 
   async listGoalIssues(goalId: string): Promise<GoalIssue[]> {

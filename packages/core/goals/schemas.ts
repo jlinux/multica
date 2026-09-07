@@ -3,6 +3,7 @@ import type {
   Goal,
   GoalIssue,
   GoalMetrics,
+  GoalUsage,
   GoalListResponse,
   Milestone,
   MilestoneListResponse,
@@ -193,6 +194,34 @@ export const GoalMetricsSchema = z
   })
   .loose();
 
+export const GoalUsageSchema = z
+  .object({
+    cost_usd_ticks: z.number().default(0),
+    input_tokens: z.number().default(0),
+    output_tokens: z.number().default(0),
+    cache_read_tokens: z.number().default(0),
+    cache_write_tokens: z.number().default(0),
+    uncosted_input_tokens: z.number().default(0),
+    uncosted_output_tokens: z.number().default(0),
+    agent_runs: z.number().default(0),
+    issues: z.number().default(0),
+    goals: z.number().default(0),
+    by_provider: z
+      .array(
+        z
+          .object({
+            provider: z.string().default(""),
+            model: z.string().default(""),
+            cost_usd_ticks: z.number().default(0),
+            tokens: z.number().default(0),
+            agent_runs: z.number().default(0),
+          })
+          .loose(),
+      )
+      .default([]),
+  })
+  .loose();
+
 export const GoalIssueSchema = z
   .object({
     id: z.string(),
@@ -304,4 +333,18 @@ export const EMPTY_GOAL_METRICS: GoalMetrics = {
   overdue: 0,
   retro_goals: 0,
   orphan_goals: 0,
+};
+
+export const EMPTY_GOAL_USAGE: GoalUsage = {
+  cost_usd_ticks: 0,
+  input_tokens: 0,
+  output_tokens: 0,
+  cache_read_tokens: 0,
+  cache_write_tokens: 0,
+  uncosted_input_tokens: 0,
+  uncosted_output_tokens: 0,
+  agent_runs: 0,
+  issues: 0,
+  goals: 0,
+  by_provider: [],
 };

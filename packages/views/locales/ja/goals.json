@@ -8,6 +8,18 @@
     "focus": "この連鎖をハイライト",
     "open": "ゴールを開く"
   },
+  "cost": {
+    "by_provider": "実行別",
+    "heading": "かかったコスト",
+    "hint": "届けた実行から導出されます。手入力の項目はありません",
+    "issues": "課題",
+    "no_spend": "まだエージェントは実行していません",
+    "rolled_up_other": "{{count}} 件のゴールから集計",
+    "runs": "エージェント実行",
+    "spend": "支出",
+    "uncosted_hint": "無料として数えず別掲します。不明な支出は安い支出ではありません",
+    "uncosted_other": "提供元が値付けしていないトークンが {{count}} 件"
+  },
   "detail": {
     "achieved_on": "達成",
     "actual": "実績",

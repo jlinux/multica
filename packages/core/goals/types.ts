@@ -248,6 +248,38 @@ export interface GoalMetrics {
   orphan_goals: number;
 }
 
+/**
+ * What a goal has cost, rolled up through everything aligned beneath it.
+ *
+ * Nothing here is entered by hand: the chain from a token to a goal already
+ * exists, so this stays true whether or not anyone maintains it. Uncosted
+ * tokens are reported separately because folding them in as zero would let a
+ * goal whose spend is unknown render as a goal that was cheap.
+ */
+export interface GoalUsage {
+  /** 1e-10 USD, the unit the provider reports. Divide only for display. */
+  cost_usd_ticks: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  uncosted_input_tokens: number;
+  uncosted_output_tokens: number;
+  agent_runs: number;
+  issues: number;
+  goals: number;
+  /** Split by what ran, never by who ran it. */
+  by_provider: GoalUsageProvider[];
+}
+
+export interface GoalUsageProvider {
+  provider: string;
+  model: string;
+  cost_usd_ticks: number;
+  tokens: number;
+  agent_runs: number;
+}
+
 export interface GoalListResponse {
   goals: Goal[];
   total: number;

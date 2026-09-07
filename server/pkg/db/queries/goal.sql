@@ -66,10 +66,18 @@ UPDATE goal SET
     project_id = COALESCE(sqlc.narg('project_id'), project_id),
     kind = COALESCE(sqlc.narg('kind'), kind),
     status = COALESCE(sqlc.narg('status'), status),
-    owner_type = COALESCE(sqlc.narg('owner_type'), owner_type),
-    owner_id = COALESCE(sqlc.narg('owner_id'), owner_id),
+    -- Clearing and omitting are different requests, and COALESCE alone can
+    -- only express one of them. A goal that once had an owner could never lose
+    -- one: JSON null arrives as an absent Go pointer, an empty string is
+    -- ignored, and the endpoint returned success having changed nothing —
+    -- which is worse than refusing, because the caller believes it worked.
+    owner_type = CASE WHEN sqlc.arg('clear_owner')::bool THEN NULL
+                      ELSE COALESCE(sqlc.narg('owner_type'), owner_type) END,
+    owner_id = CASE WHEN sqlc.arg('clear_owner')::bool THEN NULL
+                    ELSE COALESCE(sqlc.narg('owner_id'), owner_id) END,
     cycle = COALESCE(sqlc.narg('cycle'), cycle),
-    due_date = COALESCE(sqlc.narg('due_date'), due_date),
+    due_date = CASE WHEN sqlc.arg('clear_due_date')::bool THEN NULL
+                    ELSE COALESCE(sqlc.narg('due_date'), due_date) END,
     position = COALESCE(sqlc.narg('position'), position),
     updated_at = now()
 WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL
@@ -197,3 +205,84 @@ SELECT
     -- cannot attribute it to anyone, which is the point.
     (SELECT COUNT(*) FROM scoped_goals WHERE is_retro)::bigint AS retro_goal_count,
     (SELECT COUNT(*) FROM scoped_goals WHERE parent_goal_id IS NULL AND level > 1)::bigint AS orphan_count;
+
+-- name: GetGoalUsageSummary :one
+-- What a goal has cost, rolled up through everything aligned beneath it.
+--
+-- This is the number no other product-management tool can produce. The chain
+-- already exists — task_usage -> agent_task_queue -> issue -> goal_issue ->
+-- goal — so nothing here is recorded by hand: the cost of a plan is a
+-- by-product of running it, and stays true whether or not anyone maintains it.
+-- With the adoption milestones supplying the numerator, a goal finally has
+-- both halves of a return.
+--
+-- The roll-up is recursive because a direction's cost is the cost of the work
+-- under it, and that work hangs off cycle goals two tiers down. Without the
+-- recursion an upper-tier goal reports zero, which reads as free rather than
+-- as "ask the tier below".
+--
+-- cost_usd_ticks is the provider's own price at 1e-10 USD. Some runs arrive
+-- unpriced, so the uncosted token totals come back alongside rather than being
+-- silently folded in as zero: a goal whose spend is unknown must not render as
+-- a goal that was cheap.
+WITH RECURSIVE goal_tree AS (
+    SELECT g.id FROM goal g
+    WHERE g.id = $1 AND g.workspace_id = $2 AND g.deleted_at IS NULL
+    UNION
+    SELECT child.id FROM goal child
+    JOIN goal_tree parent ON child.parent_goal_id = parent.id
+    WHERE child.workspace_id = $2 AND child.deleted_at IS NULL
+),
+tree_issues AS (
+    SELECT DISTINCT gi.issue_id
+    FROM goal_issue gi
+    JOIN goal_tree gt ON gt.id = gi.goal_id
+    WHERE gi.workspace_id = $2
+)
+SELECT
+    COALESCE(SUM(tu.input_tokens), 0)::bigint AS total_input_tokens,
+    COALESCE(SUM(tu.output_tokens), 0)::bigint AS total_output_tokens,
+    COALESCE(SUM(tu.cache_read_tokens), 0)::bigint AS total_cache_read_tokens,
+    COALESCE(SUM(tu.cache_write_tokens), 0)::bigint AS total_cache_write_tokens,
+    COALESCE(SUM(tu.cost_usd_ticks), 0)::bigint AS total_cost_usd_ticks,
+    COALESCE(SUM(tu.input_tokens)  FILTER (WHERE tu.cost_usd_ticks IS NULL), 0)::bigint AS uncosted_input_tokens,
+    COALESCE(SUM(tu.output_tokens) FILTER (WHERE tu.cost_usd_ticks IS NULL), 0)::bigint AS uncosted_output_tokens,
+    COUNT(DISTINCT tu.task_id)::bigint AS task_count,
+    (SELECT COUNT(*) FROM tree_issues)::bigint AS issue_count,
+    (SELECT COUNT(*) FROM goal_tree)::bigint AS goal_count
+FROM task_usage tu
+JOIN agent_task_queue atq ON atq.id = tu.task_id
+JOIN tree_issues ti ON ti.issue_id = atq.issue_id;
+
+-- name: ListGoalUsageByProvider :many
+-- The same roll-up, split by provider and model.
+--
+-- Split by what ran, never by who ran it. Which CLI a goal's work went through
+-- is an operational fact about tooling; attaching spend to a person is the
+-- performance instrument this layer refuses to be, and the split is only
+-- useful for the first question anyway.
+WITH RECURSIVE goal_tree AS (
+    SELECT g.id FROM goal g
+    WHERE g.id = $1 AND g.workspace_id = $2 AND g.deleted_at IS NULL
+    UNION
+    SELECT child.id FROM goal child
+    JOIN goal_tree parent ON child.parent_goal_id = parent.id
+    WHERE child.workspace_id = $2 AND child.deleted_at IS NULL
+),
+tree_issues AS (
+    SELECT DISTINCT gi.issue_id
+    FROM goal_issue gi
+    JOIN goal_tree gt ON gt.id = gi.goal_id
+    WHERE gi.workspace_id = $2
+)
+SELECT
+    tu.provider,
+    tu.model,
+    COALESCE(SUM(tu.cost_usd_ticks), 0)::bigint AS cost_usd_ticks,
+    COALESCE(SUM(tu.input_tokens + tu.output_tokens), 0)::bigint AS tokens,
+    COUNT(DISTINCT tu.task_id)::bigint AS task_count
+FROM task_usage tu
+JOIN agent_task_queue atq ON atq.id = tu.task_id
+JOIN tree_issues ti ON ti.issue_id = atq.issue_id
+GROUP BY tu.provider, tu.model
+ORDER BY cost_usd_ticks DESC, tokens DESC;
