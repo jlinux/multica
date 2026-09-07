@@ -32,6 +32,10 @@ interface ConfigState {
   // predate this signal are caught by the same net — indistinguishable from
   // here, and only one of the two answers is safe to guess.
   localWorktreeSupported: boolean;
+  // Whether the connected server has the goal layer at all. Absent reads as
+  // false: a client that shipped ahead of its server must not offer a page
+  // whose every request 404s.
+  goalsSupported: boolean;
   // Whether this server persists conversation_starters on agent create/update.
   // Older handlers accepted the unknown field and returned success while
   // dropping it, so absent must fail closed.
@@ -49,6 +53,7 @@ interface ConfigState {
   }) => void;
   setFeatureFlags: (flags?: Record<string, boolean>) => void;
   setServerVersion: (version?: string) => void;
+  setGoalsSupported: (supported?: boolean) => void;
   setLocalWorktreeSupported: (supported?: boolean) => void;
   setAgentConversationStartersSupported: (supported?: boolean) => void;
 }
@@ -65,6 +70,7 @@ export const configStore = createStore<ConfigState>((set) => ({
   featureFlags: {},
   serverVersion: "",
   localWorktreeSupported: false,
+  goalsSupported: false,
   agentConversationStartersSupported: false,
   setCdnConfig: ({ cdnDomain, cdnSigned = false }) => set({ cdnDomain, cdnSigned }),
   setAuthConfig: ({
@@ -79,6 +85,7 @@ export const configStore = createStore<ConfigState>((set) => ({
   setServerVersion: (version = "") => set({ serverVersion: version }),
   setLocalWorktreeSupported: (supported = false) =>
     set({ localWorktreeSupported: supported === true }),
+  setGoalsSupported: (supported?: boolean) => set({ goalsSupported: supported === true }),
   setAgentConversationStartersSupported: (supported = false) =>
     set({ agentConversationStartersSupported: supported === true }),
 }));

@@ -85,8 +85,12 @@ const {
   mockCommentExpandAll,
   mockResolvedCollapseAll,
   mockResolvedExpandAll,
+  mockServerCapabilities,
 } = vi.hoisted(() => ({
   mockPush: vi.fn(),
+  // Server capability declarations. Defaults to a current server; the gate
+  // itself is asserted in its own case.
+  mockServerCapabilities: { current: { goalsSupported: true } },
   mockSearchIssues: vi.fn(),
   mockSearchProjects: vi.fn(),
   mockRecentItems: { current: [] as Array<{ id: string; visitedAt: number }> },
@@ -200,6 +204,11 @@ vi.mock("@multica/core", () => ({
   useWorkspaceId: () => "ws-test",
 }));
 
+vi.mock("@multica/core/config", () => ({
+  useConfigStore: (selector: (state: unknown) => unknown) =>
+    selector(mockServerCapabilities.current),
+}));
+
 vi.mock("@multica/core/paths", async (importOriginal) => ({
   // Spread the real module so pure helpers (resolveRouteIconName, used to
   // derive each nav page's icon from its href) stay intact.
@@ -306,6 +315,7 @@ vi.mock("sonner", () => ({
 
 describe("SearchCommand", () => {
   beforeEach(() => {
+    mockServerCapabilities.current = { goalsSupported: true };
     mockPush.mockReset();
     mockSearchIssues.mockReset().mockResolvedValue({ issues: [] });
     mockSearchProjects.mockReset().mockResolvedValue({ projects: [] });
@@ -392,6 +402,10 @@ describe("SearchCommand", () => {
     // the sidebar and the desktop tab bar read — so searching a page by the
     // exact name the sidebar shows must always reach it. The hand-written
     // list this replaced had gone stale by four pages (MUL-6272).
+    //
+    // Against a current server, which is the default here. The only thing
+    // allowed to drop a page from this list is the connected server saying it
+    // does not have one — never a subset someone typed out again.
     for (const page of Object.values(WORKSPACE_PAGES)) {
       const label = enLayout.nav[page.navKey];
       await user.clear(input);
@@ -402,6 +416,25 @@ describe("SearchCommand", () => {
         ),
       ).toBeInTheDocument();
     }
+  });
+
+  it("hides a page the connected server does not have", async () => {
+    // A desktop client updates on its own schedule and connects to whatever
+    // server it is pointed at. The palette is the one surface where a page
+    // nobody linked to is still reachable by typing its name, so a client
+    // shipped ahead of its server would offer a destination whose every
+    // request 404s.
+    mockServerCapabilities.current = { goalsSupported: false };
+    const user = userEvent.setup();
+    renderSearch();
+    const input = screen.getByPlaceholderText("Type a command or search...");
+
+    await user.type(input, enLayout.nav.goals);
+    expect(
+      screen.queryByText(
+        (_, el) => el?.textContent === enLayout.nav.goals && el?.tagName === "SPAN",
+      ),
+    ).not.toBeInTheDocument();
   });
 
   it("does not surface a page on an incidental substring of a hidden keyword", async () => {

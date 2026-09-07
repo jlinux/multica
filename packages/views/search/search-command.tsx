@@ -72,6 +72,7 @@ import {
 import { useT } from "../i18n";
 import { matchesPinyin } from "../editor/extensions/pinyin-match";
 import { HighlightText } from "./highlight-text";
+import { useConfigStore } from "@multica/core/config";
 import { useSearchStore } from "./search-store";
 
 // The palette's Pages group is generated from WORKSPACE_PAGES, the same
@@ -314,14 +315,19 @@ export function SearchCommand() {
   // copy under `search.pages`: one translated string per page, so the palette
   // can never disagree with the sidebar about what a page is called.
   const { t: tNav } = useT("layout");
+  // Same capability gate as the sidebar: a client that shipped ahead of its
+  // server must not offer a destination whose every request 404s, and the
+  // palette is the one surface where a page nobody linked to is still
+  // reachable by typing its name.
+  const goalsSupported = useConfigStore((s) => s.goalsSupported);
   const navPages = useMemo<NavPage[]>(
     () =>
-      NAV_PAGE_KEYS.map((key) => ({
+      NAV_PAGE_KEYS.filter((key) => key !== "goals" || goalsSupported).map((key) => ({
         key,
         label: tNav(($) => $.nav[WORKSPACE_PAGES[key].navKey]),
         keywords: PAGE_KEYWORDS[key],
       })),
-    [tNav],
+    [tNav, goalsSupported],
   );
   const { pathname, getShareableUrl } = useNavigation();
   const intentNavigate = useIntentNavigate();

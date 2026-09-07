@@ -81,6 +81,18 @@ type AppConfig struct {
 	// must fail closed when this declaration is absent.
 	AgentConversationStartersSupported bool `json:"agent_conversation_starters_supported"`
 
+	// GoalsSupported tells independently deployed clients that this server has
+	// the goal layer: the tables, the endpoints, the realtime events.
+	//
+	// Unlike the two flags above, absence here is not about a silent wrong
+	// answer — an older server simply 404s /api/goals. But a desktop client
+	// updates on its own schedule and connects to whatever server it is
+	// pointed at, so without this it would render a Goals entry that can only
+	// ever fail, on every workspace, with no way for the user to tell whether
+	// the feature is broken or merely not deployed yet. Absent reads as false,
+	// and the entry does not appear.
+	GoalsSupported bool `json:"goals_supported"`
+
 	// ServerVersion is the running API build version, so self-hosted
 	// operators can confirm what's deployed and include it in bug reports.
 	// Only emitted on self-hosted deployments — omitted on the managed cloud,
@@ -99,9 +111,12 @@ func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 		// running, the save gate is running with it.
 		LocalWorktreeSupported:             true,
 		AgentConversationStartersSupported: true,
-		AllowSignup:                        os.Getenv("ALLOW_SIGNUP") != "false",
-		GoogleClientID:                     os.Getenv("GOOGLE_CLIENT_ID"),
-		WorkspaceCreationDisabled:          os.Getenv("DISABLE_WORKSPACE_CREATION") == "true",
+		// A property of this build: if this code is running, so are the goal
+		// endpoints it ships with.
+		GoalsSupported:            true,
+		AllowSignup:               os.Getenv("ALLOW_SIGNUP") != "false",
+		GoogleClientID:            os.Getenv("GOOGLE_CLIENT_ID"),
+		WorkspaceCreationDisabled: os.Getenv("DISABLE_WORKSPACE_CREATION") == "true",
 	}
 	if h.Storage != nil {
 		config.CdnDomain = h.Storage.CdnDomain()

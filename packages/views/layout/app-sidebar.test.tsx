@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@multica/core/api";
 import { AppSidebar } from "./app-sidebar";
 
-const { appForeground, chatSessions, chatStore, detail, deletePin, inboxItems, navigation, pins, sidebarState, summary, workspaces } = vi.hoisted(() => ({
+const { appForeground, chatSessions, chatStore, detail, deletePin, inboxItems, navigation, pins, serverCapabilities, sidebarState, summary, workspaces } = vi.hoisted(() => ({
+  // Server capability declarations, as /api/config reports them.
+  serverCapabilities: { current: { goalsSupported: false, workspaceCreationDisabled: false } },
   appForeground: { current: true },
   sidebarState: { setOpenMobile: vi.fn() },
   chatSessions: { current: [] as { id?: string; unread_count?: number }[] },
@@ -29,6 +31,11 @@ const { appForeground, chatSessions, chatStore, detail, deletePin, inboxItems, n
       },
     ],
   },
+}));
+
+vi.mock("@multica/core/config", () => ({
+  useConfigStore: (selector: (state: unknown) => unknown) =>
+    selector(serverCapabilities.current),
 }));
 
 vi.mock("@dnd-kit/core", () => ({
@@ -127,7 +134,7 @@ vi.mock("@multica/core/paths", async (importOriginal) => ({
     myIssues: () => "/acme/my-issues",
     issues: () => "/acme/issues",
     projects: () => "/acme/projects",
-    goals: () => "/ws-test/goals",
+    goals: () => "/acme/goals",
     autopilots: () => "/acme/autopilots",
     agents: () => "/acme/agents",
     squads: () => "/acme/squads",
@@ -428,5 +435,35 @@ describe("personal nav — Chat", () => {
     appForeground.current = false;
     const { container } = render(<AppSidebar />);
     expect(chatBadge(container)).toHaveAttribute("aria-label", "5");
+  });
+});
+
+describe("workspace nav — server capability gate", () => {
+  // A desktop client updates on its own schedule and connects to whatever
+  // server it is pointed at. A nav entry for a feature the connected server
+  // does not have is an entry that can only ever fail, on every workspace,
+  // with no way for the user to tell a broken feature from an undeployed one.
+  const goalsNav = (container: HTMLElement) =>
+    container.querySelector<HTMLElement>('button[data-href="/acme/goals"]');
+
+  beforeEach(() => {
+    navigation.current = { pathname: "/acme/issues" };
+    serverCapabilities.current = { goalsSupported: false, workspaceCreationDisabled: false };
+  });
+
+  it("hides Goals when the server has not declared it", () => {
+    const { container } = render(<AppSidebar />);
+    expect(goalsNav(container)).toBeNull();
+    // The rest of the nav is untouched: an absent declaration is about one
+    // feature, not a reason to render a smaller sidebar.
+    expect(
+      container.querySelector('button[data-href="/acme/issues"]'),
+    ).not.toBeNull();
+  });
+
+  it("shows Goals once the server declares it", () => {
+    serverCapabilities.current = { goalsSupported: true, workspaceCreationDisabled: false };
+    const { container } = render(<AppSidebar />);
+    expect(goalsNav(container)).not.toBeNull();
   });
 });

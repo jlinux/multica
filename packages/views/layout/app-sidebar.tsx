@@ -436,6 +436,14 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
   const { data: workspaces = EMPTY_WORKSPACES } = useQuery(workspaceListOptions());
   const { data: myInvitations = EMPTY_INVITATIONS } = useQuery(myInvitationListOptions());
   const workspaceCreationDisabled = useConfigStore((s) => s.workspaceCreationDisabled);
+  // A desktop client updates on its own schedule and connects to whatever
+  // server it is pointed at, so a nav entry for a feature that server does not
+  // have is an entry that can only ever fail. Absent reads as unsupported.
+  const goalsSupported = useConfigStore((s) => s.goalsSupported);
+  const visibleWorkspaceNav = React.useMemo(
+    () => workspaceNav.filter((item) => item.key !== "goals" || goalsSupported),
+    [goalsSupported],
+  );
 
   // On a phone the sidebar is a Sheet covering the page, so navigating out of
   // it has to dismiss it — otherwise the destination renders underneath and the
@@ -832,7 +840,7 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
             <SidebarGroupLabel>{t(($) => $.sidebar.workspace_group)}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu className="gap-0.5">
-                {workspaceNav.map((item) => {
+                {visibleWorkspaceNav.map((item) => {
                   const href = p[item.key]();
                   const Icon = routeIconForPath(href);
                   const isActive = !isActivePinnedRoute && isNavActive(pathname, href);
