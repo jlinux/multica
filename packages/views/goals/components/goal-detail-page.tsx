@@ -29,7 +29,7 @@ import { useWorkspaceId } from "@multica/core/hooks";
 import { useWorkspacePaths } from "@multica/core/paths";
 import { useT } from "../../i18n";
 import { AppLink } from "../../navigation";
-import { PageHeader, PAGE_GUTTER } from "../../layout/page-header";
+import { PageHeader, PAGE_GUTTER, PAGE_RAIL } from "../../layout/page-header";
 import { Badge } from "@multica/ui/components/ui/badge";
 import { Button } from "@multica/ui/components/ui/button";
 import { Skeleton } from "@multica/ui/components/ui/skeleton";
@@ -111,116 +111,123 @@ export function GoalDetailPage({ goalId }: { goalId: string }) {
         </AppLink>
       </PageHeader>
 
-      <div className={cn("flex-1 overflow-y-auto pt-4 pb-16", PAGE_GUTTER)}>
-        {goalQuery.isPending ? (
-          <DetailSkeleton label={t(($) => $.page.loading)} />
-        ) : goalQuery.isError || !goal ? (
-          <Empty>
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <AlertTriangle className="size-4" />
-              </EmptyMedia>
-              <EmptyTitle>{t(($) => $.detail.not_found)}</EmptyTitle>
-            </EmptyHeader>
-          </Empty>
-        ) : (
-          <div className="mx-auto max-w-4xl">
-            <GoalHeading goal={goal} />
+      {/* The rail lives here rather than on each branch. A detail page that
+          puts it on the loaded content alone jumps inward the moment the query
+          resolves, because the skeleton and the not-found state were reading a
+          different width (MUL-7107). One wrapper means a branch added later
+          cannot land off the rail. */}
+      <div className="flex-1 overflow-y-auto pt-4 pb-16">
+        <div className={cn(PAGE_RAIL, PAGE_GUTTER)}>
+          {goalQuery.isPending ? (
+            <DetailSkeleton label={t(($) => $.page.loading)} />
+          ) : goalQuery.isError || !goal ? (
+            <Empty>
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <AlertTriangle className="size-4" />
+                </EmptyMedia>
+                <EmptyTitle>{t(($) => $.detail.not_found)}</EmptyTitle>
+              </EmptyHeader>
+            </Empty>
+          ) : (
+            <>
+              <GoalHeading goal={goal} />
 
-            {(ancestors.length > 0 || previous) && (
-              <div className="mt-4 flex flex-col gap-1.5 rounded-lg border border-surface-border bg-surface p-3">
-                {ancestors.length > 0 && (
-                  <ChainRow
-                    label={t(($) => $.detail.aligns_to)}
-                    goals={ancestors}
-                    hrefFor={(g) => paths.goalDetail(g.id)}
-                  />
-                )}
-                {previous && (
-                  <ChainRow
-                    label={t(($) => $.detail.continues)}
-                    goals={[previous]}
-                    hrefFor={(g) => paths.goalDetail(g.id)}
-                  />
-                )}
+              {(ancestors.length > 0 || previous) && (
+                <div className="mt-4 flex flex-col gap-1.5 rounded-lg border border-surface-border bg-surface p-3">
+                  {ancestors.length > 0 && (
+                    <ChainRow
+                      label={t(($) => $.detail.aligns_to)}
+                      goals={ancestors}
+                      hrefFor={(g) => paths.goalDetail(g.id)}
+                    />
+                  )}
+                  {previous && (
+                    <ChainRow
+                      label={t(($) => $.detail.continues)}
+                      goals={[previous]}
+                      hrefFor={(g) => paths.goalDetail(g.id)}
+                    />
+                  )}
+                </div>
+              )}
+
+              <SeamNotice />
+
+              {/* Under the seam notice on purpose: the sentence above says the
+                  goal is not something an agent can be handed, and this is the
+                  evidence of what the agents beneath it actually did. */}
+              <div className="mt-4">
+                <GoalCostCard goalId={goalId} />
               </div>
-            )}
 
-            <SeamNotice />
+              <SectionHeading
+                title={t(($) => $.detail.milestones)}
+                hint={t(($) => $.detail.milestones_hint)}
+                action={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={() => setAddingMilestone(true)}
+                  >
+                    <Plus className="size-3.5" />
+                    {t(($) => $.detail.add_milestone)}
+                  </Button>
+                }
+              />
+              {milestonesQuery.isPending ? (
+                <Skeleton className="h-28 rounded-lg" />
+              ) : (milestonesQuery.data ?? []).length === 0 ? (
+                <Empty className="rounded-lg border border-surface-border bg-surface">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <CircleDashed className="size-4" />
+                    </EmptyMedia>
+                    <EmptyTitle>{t(($) => $.detail.no_milestones)}</EmptyTitle>
+                    <EmptyDescription>
+                      {t(($) => $.detail.no_milestones_hint)}
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              ) : (
+                <div className="overflow-hidden rounded-lg border border-surface-border bg-surface">
+                  {(milestonesQuery.data ?? []).map((milestone) => (
+                    <MilestoneRow
+                      key={milestone.id}
+                      milestone={milestone}
+                      goalId={goalId}
+                      proposals={proposalsByMilestone.get(milestone.id) ?? []}
+                      onReschedule={() => setRescheduling(milestone)}
+                    />
+                  ))}
+                </div>
+              )}
 
-            {/* Under the seam notice on purpose: the sentence above says the
-                goal is not something an agent can be handed, and this is the
-                evidence of what the agents beneath it actually did. */}
-            <div className="mt-4">
-              <GoalCostCard goalId={goalId} />
-            </div>
-
-            <SectionHeading
-              title={t(($) => $.detail.milestones)}
-              hint={t(($) => $.detail.milestones_hint)}
-              action={
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={() => setAddingMilestone(true)}
-                >
-                  <Plus className="size-3.5" />
-                  {t(($) => $.detail.add_milestone)}
-                </Button>
-              }
-            />
-            {milestonesQuery.isPending ? (
-              <Skeleton className="h-28 rounded-lg" />
-            ) : (milestonesQuery.data ?? []).length === 0 ? (
-              <Empty className="rounded-lg border border-surface-border bg-surface">
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <CircleDashed className="size-4" />
-                  </EmptyMedia>
-                  <EmptyTitle>{t(($) => $.detail.no_milestones)}</EmptyTitle>
-                  <EmptyDescription>
-                    {t(($) => $.detail.no_milestones_hint)}
-                  </EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            ) : (
-              <div className="overflow-hidden rounded-lg border border-surface-border bg-surface">
-                {(milestonesQuery.data ?? []).map((milestone) => (
-                  <MilestoneRow
-                    key={milestone.id}
-                    milestone={milestone}
-                    goalId={goalId}
-                    proposals={proposalsByMilestone.get(milestone.id) ?? []}
-                    onReschedule={() => setRescheduling(milestone)}
-                  />
-                ))}
-              </div>
-            )}
-
-            <SectionHeading
-              title={t(($) => $.detail.issues)}
-              hint={t(($) => $.detail.issues_hint)}
-            />
-            {issuesQuery.isPending ? (
-              <Skeleton className="h-20 rounded-lg" />
-            ) : (issuesQuery.data ?? []).length === 0 ? (
-              <p className="rounded-lg border border-dashed border-surface-border p-4 text-center text-caption text-faint-foreground">
-                {t(($) => $.detail.no_issues)}
-              </p>
-            ) : (
-              <div className="overflow-hidden rounded-lg border border-surface-border bg-surface">
-                {(issuesQuery.data ?? []).map((issue) => (
-                  <IssueRow
-                    key={issue.id}
-                    issue={issue}
-                    href={paths.issueDetail(issue.id)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+              <SectionHeading
+                title={t(($) => $.detail.issues)}
+                hint={t(($) => $.detail.issues_hint)}
+              />
+              {issuesQuery.isPending ? (
+                <Skeleton className="h-20 rounded-lg" />
+              ) : (issuesQuery.data ?? []).length === 0 ? (
+                <p className="rounded-lg border border-dashed border-surface-border p-4 text-center text-caption text-faint-foreground">
+                  {t(($) => $.detail.no_issues)}
+                </p>
+              ) : (
+                <div className="overflow-hidden rounded-lg border border-surface-border bg-surface">
+                  {(issuesQuery.data ?? []).map((issue) => (
+                    <IssueRow
+                      key={issue.id}
+                      issue={issue}
+                      href={paths.issueDetail(issue.id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       {addingMilestone && (
@@ -623,7 +630,7 @@ function IssueRow({ issue, href }: { issue: GoalIssue; href: string }) {
 
 function DetailSkeleton({ label }: { label: string }) {
   return (
-    <div aria-busy aria-label={label} className="mx-auto max-w-4xl space-y-4">
+    <div aria-busy aria-label={label} className="space-y-4">
       <Skeleton className="h-8 w-2/3" />
       <Skeleton className="h-16 w-full rounded-lg" />
       <Skeleton className="h-28 w-full rounded-lg" />
