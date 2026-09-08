@@ -33,7 +33,7 @@ tempted to build a list from a union.
 Entirely new, conflicts with nothing upstream:
 
 ```
-server/migrations/451..468_*.sql        6 tables, 12 concurrent indexes
+server/migrations/456..473_*.sql        6 tables, 12 concurrent indexes
 server/pkg/db/queries/goal.sql          new file
 server/pkg/db/queries/milestone.sql     new file
 server/internal/goal/                   new package (this one)
@@ -82,7 +82,7 @@ Still to come, with their expected merge cost:
 ## Where the rules live
 
 The database enforces every invariant that needs no lookup (see the CHECK
-constraints in migration 451 and 453). This package enforces the ones that do,
+constraints in migration 456 and 458). This package enforces the ones that do,
 and owns every message a user reads when a rule refuses an edit:
 
 - `CanAlign` — a goal aligns exactly one tier up. Skipping a tier is refused;

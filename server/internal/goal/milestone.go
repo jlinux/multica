@@ -19,7 +19,7 @@ const (
 	MilestoneNthUse MilestoneType = "nth_use"
 )
 
-// MilestoneStatus mirrors the milestone.status CHECK in migration 453.
+// MilestoneStatus mirrors the milestone.status CHECK in migration 458.
 // IsDelayed is an overlay flag, not a member of this set: a milestone can be
 // in progress and late at the same time, and collapsing the two would lose
 // whichever fact was written second.

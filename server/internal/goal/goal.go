@@ -8,7 +8,7 @@
 // without a Postgres.
 //
 // The database enforces the invariants that need no lookup (see migration
-// 451). This package enforces the ones that do, and owns every message a user
+// 456). This package enforces the ones that do, and owns every message a user
 // reads when a rule refuses their edit.
 package goal
 
@@ -46,7 +46,7 @@ const (
 	KindBreakthru Kind = "brk"
 )
 
-// Status values mirror the goal.status CHECK in migration 451.
+// Status values mirror the goal.status CHECK in migration 456.
 type Status string
 
 const (
@@ -231,7 +231,7 @@ func Validate(in Input) error {
 // through goal_issue, and an agent that owns a goal owns the record-keeping,
 // not the delivery.
 //
-// The structural guarantee is the separate table (migration 451); this
+// The structural guarantee is the separate table (migration 456); this
 // function is the second lock, for any future code path tempted to build an
 // assignable list from a union.
 func Assignable() bool { return false }
