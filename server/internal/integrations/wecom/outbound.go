@@ -243,6 +243,10 @@ func (o *Outbound) processEvent(ctx context.Context, e events.Event) error {
 	if o.senders == nil {
 		return errors.New("wecom: sender registry not configured")
 	}
+	chatID, err := wecomBindingChatID(binding)
+	if err != nil {
+		return err
+	}
 	chatType := aibotChatTypeFromChannel(channel.ChatType(binding.ChatType))
 	sender := o.senders.get(inst.ID)
 	if sender == nil {
@@ -257,7 +261,7 @@ func (o *Outbound) processEvent(ctx context.Context, e events.Event) error {
 		if o.relay.publish(relayFrame{
 			Kind:           relayKindReply,
 			InstallationID: util.UUIDToString(inst.ID),
-			ChatID:         binding.ChannelChatID,
+			ChatID:         chatID,
 			ChatType:       chatType,
 			Content:        content,
 			TaskID:         util.UUIDToString(taskID),
@@ -285,7 +289,7 @@ func (o *Outbound) processEvent(ctx context.Context, e events.Event) error {
 	// bound to it, and an empty markdown bubble ahead of that file would be
 	// noise the user has to scroll past.
 	if content != "" {
-		if err := sender.sendTextCtx(ctx, binding.ChannelChatID, chatType, content); err != nil {
+		if err := sender.sendTextCtx(ctx, chatID, chatType, content); err != nil {
 			return err
 		}
 		o.delivered()
@@ -297,7 +301,7 @@ func (o *Outbound) processEvent(ctx context.Context, e events.Event) error {
 	// been counted for this reply yet and the attachment path owes its outcome.
 	o.deliverAttachments(e, attachmentTarget{
 		InstallationID: binding.InstallationID,
-		ChatID:         binding.ChannelChatID,
+		ChatID:         chatID,
 		ChatType:       chatType,
 		SessionID:      e.ChatSessionID,
 	}, content == "")

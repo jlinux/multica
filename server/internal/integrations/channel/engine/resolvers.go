@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/multica-ai/multica/server/internal/channelaccess"
 	"github.com/multica-ai/multica/server/internal/integrations/channel"
 	"github.com/multica-ai/multica/server/internal/service"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
@@ -23,14 +24,15 @@ import (
 type Outcome string
 
 const (
-	OutcomeDropped       Outcome = "dropped"
-	OutcomeNeedsBinding  Outcome = "needs_binding"
-	OutcomeIngested      Outcome = "ingested"
-	OutcomeFreshPending  Outcome = "fresh_pending"
-	OutcomeChatStarted   Outcome = "chat_started"
-	OutcomeIssueUsage    Outcome = "issue_usage"
-	OutcomeAgentOffline  Outcome = "agent_offline"
-	OutcomeAgentArchived Outcome = "agent_archived"
+	OutcomeGuestCommandDenied Outcome = "guest_command_denied"
+	OutcomeDropped            Outcome = "dropped"
+	OutcomeNeedsBinding       Outcome = "needs_binding"
+	OutcomeIngested           Outcome = "ingested"
+	OutcomeFreshPending       Outcome = "fresh_pending"
+	OutcomeChatStarted        Outcome = "chat_started"
+	OutcomeIssueUsage         Outcome = "issue_usage"
+	OutcomeAgentOffline       Outcome = "agent_offline"
+	OutcomeAgentArchived      Outcome = "agent_archived"
 )
 
 // DropReason enumerates the drop-audit categories. Values match the legacy
@@ -90,15 +92,18 @@ type ResolvedInstallation struct {
 	Platform        any
 }
 
-// ResolvedIdentity is the sender mapped to a Multica user.
+// ResolvedIdentity identifies a member caller or an explicitly sponsored guest.
 type ResolvedIdentity struct {
-	UserID pgtype.UUID
+	// For guests UserID is the administrator sponsoring this agent, not the caller.
+	WecomGuest *channelaccess.WecomGuest
+	UserID     pgtype.UUID
 }
 
 // EnsureSessionParams carries the inputs for SessionBinder.EnsureSession.
 // Sender is the resolved session creator (the sole human for p2p, the
-// installer for group chats — the Router decides which and passes it here).
+// installer for member group chats, sponsor for guests — the Router decides).
 type EnsureSessionParams struct {
+	WecomGuest   *channelaccess.WecomGuest
 	Installation ResolvedInstallation
 	Sender       pgtype.UUID
 	Message      channel.InboundMessage
@@ -107,9 +112,11 @@ type EnsureSessionParams struct {
 // StartSessionParams carries a /new route rotation. Creator owns the new Chat;
 // Sender is the authenticated user who issued the command and initiated its
 // first context. They differ for group chats, where the installer owns the Chat
-// but the group member remains the turn initiator. PersistMessage is false only
+// but the group member remains the turn initiator. Guest sessions use their
+// sponsor for both; WecomGuest retains the actual external caller. PersistMessage is false only
 // for the bare control command; a media-only /new is a real first turn.
 type StartSessionParams struct {
+	WecomGuest             *channelaccess.WecomGuest
 	Installation           ResolvedInstallation
 	Creator                pgtype.UUID
 	Sender                 pgtype.UUID

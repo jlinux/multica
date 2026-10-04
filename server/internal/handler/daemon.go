@@ -2149,6 +2149,16 @@ func claimResponseAgentIdentityMatches(resp AgentTaskResponse) bool {
 // means the task must not be dispatched; the builder has already cancelled it
 // where the failure semantics require it.
 func (h *Handler) buildClaimedTaskResponse(r *http.Request, task *db.AgentTaskQueue, runtime db.AgentRuntime, runtimeID, runtimeWorkspaceID string) (resp AgentTaskResponse, deliveredCommentIDs []pgtype.UUID, agentSkillCount, builtinSkillCount int, failure *claimBuildFailure) {
+	if err := h.TaskService.ValidateWecomGuestTask(r.Context(), *task); err != nil {
+		if !errors.Is(err, service.ErrWecomGuestAccess) {
+			slog.Error("daemon claim: guest access lookup failed; requeueing claim", "task_id", uuidToString(task.ID), "error", err)
+			if _, requeueErr := h.TaskService.RequeueTaskAfterClaimFailure(r.Context(), *task); requeueErr != nil {
+				slog.Error("daemon claim: guest access lookup requeue failed", "task_id", uuidToString(task.ID), "error", requeueErr)
+			}
+			return resp, nil, 0, 0, &claimBuildFailure{outcome: "guest_access_lookup_failed", status: http.StatusInternalServerError, message: "failed to validate channel access"}
+		}
+		return resp, nil, 0, 0, h.failClaimedTaskBeforeLaunch(r.Context(), task, "WeCom guest access is no longer authorized.", taskfailure.ReasonInvalidTaskIdentity, "guest_access_revoked", http.StatusForbidden, "guest access is no longer authorized")
+	}
 	// Build response with fresh agent data (name + skills + custom_env + custom_args).
 	resp = taskToResponse(*task, runtimeWorkspaceID)
 	var issueNumber int32

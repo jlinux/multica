@@ -91,11 +91,15 @@ type engineSessionBinder interface {
 }
 
 func (r *sessionBinder) StartSession(ctx context.Context, p engine.StartSessionParams) (engine.StartSessionResult, error) {
+	key, config, err := wecomGuestSessionRoute(p.Message.Source, p.WecomGuest)
+	if err != nil {
+		return engine.StartSessionResult{}, err
+	}
 	result, err := r.session.StartSession(ctx, engine.StartSessionInput{
 		EnsureSessionInput: engine.EnsureSessionInput{
 			WorkspaceID: p.Installation.WorkspaceID, AgentID: p.Installation.AgentID,
 			InstallationID: p.Installation.ID, Sender: p.Creator,
-			BindingKey: p.Message.Source.ChatID, ChatType: p.Message.Source.ChatType,
+			BindingKey: key, BindingConfig: config, ChatType: p.Message.Source.ChatType,
 		},
 		Initiator: p.Sender,
 		Body:      p.Message.Text, CommandText: p.Message.CommandText, MessageID: p.Message.MessageID,
@@ -146,9 +150,8 @@ type identityResolver struct{ store *Store }
 
 // ResolveSender maps the WeCom smart-bot userid (the anonymized "T"-prefixed
 // id the aibot API assigns per bot, from Source.SenderID) to a Multica user
-// via the channel_user_binding table. First-time senders have no row and
-// return engine.ErrSenderUnbound, which the Router pairs with the outbound
-// binding prompt (see OutboundReplier.sendBindingPrompt).
+// via the channel_user_binding table. First-time senders may use an explicit
+// operator guest grant; otherwise ErrSenderUnbound prompts account binding.
 //
 // Why explicit binding rather than an implicit heuristic: aibot's userids
 // have no relationship to real enterprise userids or emails — they are
@@ -172,7 +175,7 @@ func (r *identityResolver) ResolveSender(ctx context.Context, inst engine.Resolv
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return engine.ResolvedIdentity{}, engine.ErrSenderUnbound
+			return resolveWecomGuest(ctx, r.store.Queries, inst, msg)
 		}
 		return engine.ResolvedIdentity{}, err
 	}
@@ -231,15 +234,19 @@ type sessionBinder struct{ session engineSessionBinder }
 
 // EnsureSession picks the wecom session-isolation key. For single (p2p)
 // chats the wecom ChatID already IS the userid, one session per user;
-// for group chats we key on the chatid so all group traffic lands in one
-// session — the aibot API does not have a first-class thread concept.
+// group chats use a sender-specific key because WeCom has no thread concept.
 func (r *sessionBinder) EnsureSession(ctx context.Context, p engine.EnsureSessionParams) (pgtype.UUID, error) {
+	key, config, err := wecomGuestSessionRoute(p.Message.Source, p.WecomGuest)
+	if err != nil {
+		return pgtype.UUID{}, err
+	}
 	return r.session.EnsureSession(ctx, engine.EnsureSessionInput{
 		WorkspaceID:    p.Installation.WorkspaceID,
 		AgentID:        p.Installation.AgentID,
 		InstallationID: p.Installation.ID,
 		Sender:         p.Sender,
-		BindingKey:     p.Message.Source.ChatID,
+		BindingKey:     key,
+		BindingConfig:  config,
 		ChatType:       p.Message.Source.ChatType,
 	})
 }

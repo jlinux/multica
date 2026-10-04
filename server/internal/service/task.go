@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/multica-ai/multica/server/internal/analytics"
 	"github.com/multica-ai/multica/server/internal/attribution"
+	"github.com/multica-ai/multica/server/internal/channelaccess"
 	"github.com/multica-ai/multica/server/internal/chattitle"
 	"github.com/multica-ai/multica/server/internal/entitlement"
 	"github.com/multica-ai/multica/server/internal/events"
@@ -1898,6 +1899,10 @@ func (s *TaskService) PrepareChatTaskEnqueue(
 		return PreparedChatTaskEnqueue{}, ErrChatTaskAgentNoRuntime
 	}
 
+	if guest := channelaccess.WecomGuestFromContext(ctx); guest != nil {
+		return guestPrepared(ctx, s.Queries, guest, agentID, initiatorUserID)
+	}
+
 	attr := attribution.DirectHumanRun(
 		initiatorUserID, attribution.EvidenceChat, pgtype.UUID{},
 	)
@@ -1960,6 +1965,10 @@ func (s *TaskService) enqueueChatTask(
 	expectedBindingID pgtype.UUID,
 	expectedRouteRevision int64,
 ) (db.AgentTaskQueue, error) {
+	ctx, err := s.guestEnqueueContext(ctx, chatSession, requireDelivery)
+	if err != nil {
+		return db.AgentTaskQueue{}, err
+	}
 	prepared, err := s.PrepareChatTaskEnqueue(ctx, chatSession.AgentID, initiatorUserID)
 	if err != nil {
 		return db.AgentTaskQueue{}, err
@@ -2056,6 +2065,15 @@ func (s *TaskService) enqueueChatTaskTx(
 		if expectedBindingID.Valid && !routeMatches {
 			return db.AgentTaskQueue{}, fmt.Errorf("lock expected channel chat route: %w", pgx.ErrNoRows)
 		}
+	}
+
+	if bindingErr == nil {
+		prepared, err = validateGuestEnqueueTx(ctx, qtx, binding, currentSession, initiatorUserID, requireDelivery, prepared)
+		if err != nil {
+			return db.AgentTaskQueue{}, err
+		}
+	} else if prepared.attrSource.String == channelaccess.WecomGuestSource {
+		return db.AgentTaskQueue{}, ErrWecomGuestAccess
 	}
 
 	pendingFresh := false
@@ -2338,6 +2356,9 @@ func (s *TaskService) SendDirectChatMessage(
 	uploaderType string,
 	uploaderID pgtype.UUID,
 ) (*DirectChatSendResult, error) {
+	if _, err := s.guestEnqueueContext(ctx, session, false); err != nil {
+		return nil, err
+	}
 	// Build the per-task Composio overlay before the transaction — it can do
 	// network I/O and must not run with a DB transaction open.
 	overlay := s.buildRuntimeMCPOverlay(ctx, initiatorUserID, agent)
@@ -4787,7 +4808,7 @@ func (s *TaskService) FailTask(ctx context.Context, taskID pgtype.UUID, errMsg, 
 					"task_id", util.UUIDToString(taskID),
 					"agent_id", util.UUIDToString(parent.AgentID), "error", aerr)
 			} else {
-				retryOverlay = s.buildRuntimeMCPOverlay(ctx, parent.OriginatorUserID, agent)
+				retryOverlay = s.taskRetryOverlay(ctx, parent, agent)
 			}
 		}
 	}
@@ -5356,7 +5377,7 @@ func (s *TaskService) MaybeRetryFailedTask(ctx context.Context, parent db.AgentT
 			"error", agentErr,
 		)
 	} else {
-		runtimeMCPOverlay = s.buildRuntimeMCPOverlay(ctx, parent.OriginatorUserID, agent)
+		runtimeMCPOverlay = s.taskRetryOverlay(ctx, parent, agent)
 	}
 	// Mirror FailTask's in-tx backoff + effective-budget persistence: defer the
 	// final provider_network attempt ~5s via fire_at (zero delay leaves fire_at

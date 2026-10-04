@@ -61,14 +61,14 @@ func TestSessionBinder_EnsureSessionMapsGroupKey(t *testing.T) {
 	_, err := b.EnsureSession(context.Background(), engine.EnsureSessionParams{
 		Installation: inst,
 		Sender:       mustTestUUID(t),
-		Message:      channel.InboundMessage{Source: channel.Source{ChatID: "GROUP_1", ChatType: channel.ChatTypeGroup}},
+		Message:      channel.InboundMessage{Source: channel.Source{ChatID: "GROUP_1", SenderID: "alice", ChatType: channel.ChatTypeGroup}},
 	})
 	if err != nil {
 		t.Fatalf("EnsureSession: %v", err)
 	}
-	// wecom keys the session on the chat id (no thread concept).
-	if fb.ensureIn.BindingKey != "GROUP_1" {
-		t.Errorf("BindingKey = %q, want the group chat id GROUP_1", fb.ensureIn.BindingKey)
+	key, config, _ := wecomSessionRoute(channel.Source{ChatID: "GROUP_1", SenderID: "alice", ChatType: channel.ChatTypeGroup})
+	if fb.ensureIn.BindingKey != key || string(fb.ensureIn.BindingConfig) != string(config) {
+		t.Errorf("wrong isolated route: %+v", fb.ensureIn)
 	}
 	if fb.ensureIn.ChatType != channel.ChatTypeGroup {
 		t.Errorf("ChatType = %v, want group", fb.ensureIn.ChatType)
@@ -90,7 +90,7 @@ func TestSessionBinder_StartSessionMapsWeComRouteAndFirstTurn(t *testing.T) {
 		ClaimToken:   claim,
 		Message: channel.InboundMessage{
 			MessageID: "m1", Text: "first turn", CommandText: "current instruction",
-			Source: channel.Source{ChatID: "GROUP_1", ChatType: channel.ChatTypeGroup},
+			Source: channel.Source{ChatID: "GROUP_1", SenderID: "alice", ChatType: channel.ChatTypeGroup},
 		},
 		MediaPendingSeconds: 45,
 		PersistMessage:      true,
@@ -102,7 +102,8 @@ func TestSessionBinder_StartSessionMapsWeComRouteAndFirstTurn(t *testing.T) {
 		t.Fatal("StartSession lost shared-session result")
 	}
 	got := fb.startIn
-	if got.BindingKey != "GROUP_1" || got.Body != "first turn" || got.CommandText != "current instruction" || got.MessageID != "m1" || got.ClaimToken != claim || got.MediaPendingSeconds != 45 || !got.PersistMessage {
+	key, config, _ := wecomSessionRoute(channel.Source{ChatID: "GROUP_1", SenderID: "alice", ChatType: channel.ChatTypeGroup})
+	if got.BindingKey != key || string(got.BindingConfig) != string(config) || got.Body != "first turn" || got.CommandText != "current instruction" || got.MessageID != "m1" || got.ClaimToken != claim || got.MediaPendingSeconds != 45 || !got.PersistMessage {
 		t.Fatalf("start mapping wrong: %+v", got)
 	}
 	if got.Sender != creator || got.Initiator != sender {

@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/multica-ai/multica/server/internal/channelaccess"
 	"github.com/multica-ai/multica/server/internal/integrations/channel"
 	"github.com/multica-ai/multica/server/internal/service"
 	"github.com/multica-ai/multica/server/internal/util"
@@ -371,10 +372,14 @@ func (r *Router) processClaimed(ctx context.Context, set ResolverSet, msg channe
 		}
 	}
 
+	if identity.WecomGuest != nil {
+		ctx = channelaccess.WithWecomGuest(ctx, identity.WecomGuest)
+	}
+
 	// 5-6. Resolve the current Chat route, then either append normally or
 	// atomically create the next Chat route with its optional first turn.
 	sessionCreator := identity.UserID
-	if msg.Source.ChatType == channel.ChatTypeGroup {
+	if msg.Source.ChatType == channel.ChatTypeGroup && identity.WecomGuest == nil {
 		sessionCreator = inst.InstallerUserID
 	}
 
@@ -382,6 +387,9 @@ func (r *Router) processClaimed(ctx context.Context, set ResolverSet, msg channe
 	var parsedCommand *IssueCommand
 	if !startChat {
 		parsedCommand, _ = ParseIssueCommand(msg.CommandText)
+	}
+	if identity.WecomGuest != nil && parsedCommand != nil {
+		return Result{Outcome: OutcomeGuestCommandDenied, InstallationID: inst.ID, Sender: msg.Source.SenderID}, finalizeMark, nil
 	}
 	issueNeedsUsage := parsedCommand != nil && parsedCommand.Title == ""
 	hasMedia := set.Media != nil && set.Media.HasMedia(msg)
@@ -424,7 +432,7 @@ func (r *Router) processClaimed(ctx context.Context, set ResolverSet, msg channe
 				}
 			}
 			started, err = set.Session.StartSession(ctx, StartSessionParams{
-				Installation: inst, Creator: sessionCreator, Sender: identity.UserID, Message: msg,
+				Installation: inst, Creator: sessionCreator, Sender: identity.UserID, Message: msg, WecomGuest: identity.WecomGuest,
 				ClaimToken: claimToken, MediaPendingSeconds: mediaPendingSeconds,
 				PersistMessage: persistStartedMessage, BeforeCommit: beforeCommit,
 			})
@@ -432,6 +440,7 @@ func (r *Router) processClaimed(ctx context.Context, set ResolverSet, msg channe
 		} else {
 			sessionID, err = set.Session.EnsureSession(ctx, EnsureSessionParams{
 				Installation: inst,
+				WecomGuest:   identity.WecomGuest,
 				Sender:       sessionCreator,
 				Message:      msg,
 			})

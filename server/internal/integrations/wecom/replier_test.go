@@ -163,6 +163,7 @@ func TestReply_CommandOutcomes_PostGuidance(t *testing.T) {
 		outcome engine.Outcome
 		want    string
 	}{
+		{engine.OutcomeGuestCommandDenied, guestCommandDeniedText},
 		{engine.OutcomeFreshPending, freshPendingText},
 		{engine.OutcomeIssueUsage, issueUsageText},
 	} {

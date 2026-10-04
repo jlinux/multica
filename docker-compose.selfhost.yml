@@ -198,6 +198,8 @@ services:
       # for a debugging session and unset it when that session ends, because
       # what it records is user message content.
       MULTICA_WECOM_TRACE: ${MULTICA_WECOM_TRACE:-}
+      # Explicit administrator grants; disabled when empty.
+      MULTICA_WECOM_GUEST_ACCESS: ${MULTICA_WECOM_GUEST_ACCESS:-}
     restart: unless-stopped
 
   frontend:
