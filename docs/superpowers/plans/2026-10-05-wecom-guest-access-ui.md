@@ -47,4 +47,4 @@ Files: packages/core/{types,api,wecom}/..., packages/views/settings/components/w
 
 - [x] Backend
 - [x] Frontend
-- [ ] Review and local acceptance
+- [x] Review and local acceptance
