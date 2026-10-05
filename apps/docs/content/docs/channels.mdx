@@ -93,6 +93,8 @@ Saved settings take effect at subsequent authorization checks without a restart.
 
 On self-hosted installations, existing `MULTICA_WECOM_GUEST_ACCESS` grants appear in the dialog. After the first save, database settings take precedence, including an explicit disable. Rotating credentials for the same bot preserves its policy; disconnecting or replacing the bot requires authorization again.
 
+Update every backend replica before releasing the settings UI. When rolling back to a version that only supports environment grants, reconcile or disable those grants first: the old backend does not read database policies and could otherwise restore revoked access.
+
 ## Manage connections
 
 Workspace owners and admins can connect or disconnect Bots; for Feishu/Lark Bots, connecting and disconnecting is also open to the agent's owner. Regular members can view connected integrations and use the agents they have access to.
