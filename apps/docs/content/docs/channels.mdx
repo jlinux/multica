@@ -42,7 +42,7 @@ Step-by-step guides:
 
 1. Multica resolves the Bot to its workspace and agent.
 2. In a group or channel, only messages that explicitly @-mention the Bot continue; DMs need no mention.
-3. Multica verifies the sender's account binding and workspace membership.
+3. Multica verifies the sender's account binding and workspace membership; WeCom also supports guest access explicitly granted by an administrator.
 4. The message joins an [agent chat](/chat) session, and a run is created.
 5. The agent's reply goes back to the original DM or thread.
 
@@ -63,7 +63,7 @@ On Slack, `/new` and `/clear` are native slash commands in a DM. A native slash-
 - Feishu/Lark separates sessions by chat; later messages in the same chat continue the same session.
 - Slack separates DMs by channel; in a channel, each thread holds its own session.
 - DingTalk separates sessions by conversation; each DM or group continues its own session.
-- WeCom separates sessions by chat; each DM or group chat continues its own session.
+- WeCom isolates group sessions and tasks by sender. Follow-ups continue that sender’s session, and `/new` or `/clear` affects only their session. DMs keep separate sessions.
 - Telegram separates sessions by chat; forum topics are isolated by topic.
 
 Follow-ups in a channel still need a fresh @-mention. The agent only receives messages addressed to it — it never reads the whole channel history automatically.
@@ -72,11 +72,26 @@ Follow-ups in a channel still need a fresh @-mention. The agent only receives me
 
 The first time a member messages the Bot, they receive an account binding link. After signing in to Multica, the platform account is linked to their membership in the current workspace.
 
-Multica only runs the agent after binding completes. Every message re-checks account binding and workspace membership; after leaving a workspace, the Bot can no longer be used to reach it.
+By default, Multica only runs the agent after binding completes. Every message re-checks account binding and workspace membership; after leaving a workspace, the Bot can no longer be used to reach it.
 
 <Callout type="info">
 Account binding only confirms who the sender is. Other members on the chat platform are not automatically added to the Multica workspace.
 </Callout>
+
+## WeCom guest access
+
+Workspace owners and admins can allow people without Multica accounts through **Settings → WeCom → Guest access**:
+
+1. Enable guest access.
+2. Select known groups or add their exact group IDs manually. Groups without existing records require manual entry; wildcard access to all groups is not supported.
+3. Optionally allow guest direct messages. This authorizes all unbound identities able to message this bot privately.
+4. Review the execution identity and save. The agent’s current owner is the execution sponsor; an ordinary workspace member can remain the owner without becoming an administrator.
+
+Group messages still require an @-mention. Session isolation does not hide replies from other group members. The configured runtime must be online to execute tasks.
+
+Saved settings take effect at subsequent authorization checks without a restart. Disabling or changing a grant rejects tasks and retries under the old grant that have not started; it does not automatically stop running tasks. Changing the agent owner or removing their workspace membership invalidates the old grant until an administrator explicitly reviews and saves it again.
+
+On self-hosted installations, existing `MULTICA_WECOM_GUEST_ACCESS` grants appear in the dialog. After the first save, database settings take precedence, including an explicit disable. Rotating credentials for the same bot preserves its policy; disconnecting or replacing the bot requires authorization again.
 
 ## Manage connections
 
