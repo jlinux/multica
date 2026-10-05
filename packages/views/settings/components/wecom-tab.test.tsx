@@ -98,6 +98,11 @@ vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn(), message: vi.fn() },
 }));
 
+vi.mock("./wecom-guest-access-dialog", () => ({
+  WecomGuestAccessDialog: ({ installationId }: { installationId: string }) =>
+    <div data-testid="guest-dialog" data-installation-id={installationId} />,
+}));
+
 import { toast } from "sonner";
 import { WecomAgentBindButton, WecomTab } from "./wecom-tab";
 
@@ -320,5 +325,32 @@ describe("WecomTab", () => {
     await waitFor(() =>
       expect(mockDeleteInstallation).toHaveBeenCalledWith("workspace-1", "i1"),
     );
+  });
+});
+
+describe("WecomTab guest access", () => {
+  beforeEach(() => {
+    resetFixtures();
+    installationsRef.current.installations = [{ id: "i1", agent_id: "agent-7", bot_id: "bot", status: "active",
+      guestAccess: { status: "enabled", allowedGroupCount: 4, allowDirectMessages: false } }];
+  });
+  it.each(["owner", "admin"] as const)("allows %s to open the installation policy", async (role) => {
+    membersRef.current = [{ user_id: "user-1", role }];
+    renderUI(<WecomTab />);
+    await userEvent.click(screen.getByRole("button", { name: "Guest access" }));
+    expect(screen.getByTestId("guest-dialog")).toHaveAttribute("data-installation-id", "i1");
+  });
+  it("shows status and count to members without an edit action", () => {
+    membersRef.current = [{ user_id: "user-1", role: "member" }];
+    renderUI(<WecomTab />);
+    expect(screen.getByText(/guest access enabled/i)).toBeTruthy();
+    expect(screen.getByText(/4 allowed groups/i)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Guest access" })).toBeNull();
+  });
+  it("keeps a future summary status unavailable", () => {
+    installationsRef.current.installations = [{ id: "i1", agent_id: "agent-7", status: "active",
+      guestAccess: { status: "future", allowedGroupCount: 4, allowDirectMessages: false } }];
+    renderUI(<WecomTab />);
+    expect(screen.getByText(/guest access unavailable/i)).toBeTruthy();
   });
 });

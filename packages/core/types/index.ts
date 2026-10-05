@@ -240,6 +240,9 @@ export type {
   ListWecomInstallationsResponse,
   RegisterWecomBYORequest,
   RedeemWecomBindingTokenResponse,
+  WecomGuestAccessSummary,
+  WecomGuestAccess,
+  UpdateWecomGuestAccessRequest,
 } from "./wecom";
 export type {
   TelegramInstallation,

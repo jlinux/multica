@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ChevronRight, Trash2 } from "lucide-react";
 import { WecomMark } from "./wecom-mark";
+import { WecomGuestAccessDialog } from "./wecom-guest-access-dialog";
 import { cn } from "@multica/ui/lib/utils";
 import { Button } from "@multica/ui/components/ui/button";
 import { Card, CardContent } from "@multica/ui/components/ui/card";
@@ -66,6 +67,7 @@ export function WecomTab() {
   const configured = data?.configured === true;
   const installSupported = data?.install_supported === true;
 
+  const [guestAccessTarget, setGuestAccessTarget] = useState<string | null>(null);
   const [disconnectTarget, setDisconnectTarget] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
 
@@ -140,12 +142,18 @@ export function WecomTab() {
                     installation={inst}
                     canManage={canManage}
                     onDisconnect={() => setDisconnectTarget(inst.id)}
+                    onGuestAccess={() => setGuestAccessTarget(inst.id)}
                   />
                 ))}
               </CardContent>
             </Card>
           )}
         </section>
+      )}
+
+      {canManage && guestAccessTarget && (
+        <WecomGuestAccessDialog key={`${wsId}:${guestAccessTarget}`} wsId={wsId}
+          installationId={guestAccessTarget} onClose={() => setGuestAccessTarget(null)} />
       )}
 
       <AlertDialog
@@ -183,18 +191,28 @@ function InstallationRow({
   installation,
   canManage,
   onDisconnect,
+  onGuestAccess,
 }: {
   installation: WecomInstallation;
   canManage: boolean;
   onDisconnect: () => void;
+  onGuestAccess: () => void;
 }) {
   const { t } = useT("settings");
   const { getAgentName } = useActorName();
   const isActive = installation.status === "active";
   const agentName = getAgentName(installation.agent_id);
+  const guestAccess = installation.guestAccess;
+  function guestStatus() {
+    switch (guestAccess?.status) {
+      case "enabled": return t(($) => $.wecom.guest_access.status_enabled);
+      case "disabled": return t(($) => $.wecom.guest_access.status_disabled);
+      default: return t(($) => $.wecom.guest_access.status_unavailable);
+    }
+  }
   return (
-    <div className="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0">
-      <div className="flex items-start gap-3">
+    <div className="flex flex-wrap items-start justify-between gap-4 py-3 first:pt-0 last:pb-0">
+      <div className="flex min-w-0 items-start gap-3">
         <ActorAvatar
           actorType="agent"
           actorId={installation.agent_id}
@@ -202,7 +220,7 @@ function InstallationRow({
           enableHoverCard
           profileLink
         />
-        <div className="space-y-1">
+        <div className="min-w-0 space-y-1">
           <p className="text-body font-medium">
             {agentName}
             {!isActive && (
@@ -211,16 +229,25 @@ function InstallationRow({
               </span>
             )}
           </p>
-          <p className="text-micro text-muted-foreground">
+          <p className="text-micro text-muted-foreground [overflow-wrap:anywhere]">
             {t(($) => $.wecom.bot_id_label, { botId: installation.bot_id })}
+          </p>
+          <p className="text-caption text-muted-foreground">
+            {guestStatus()}
+            {(guestAccess?.status === "enabled" || guestAccess?.status === "disabled") && (
+              <> · {t(($) => $.wecom.guest_access.group_count, { count: guestAccess.allowedGroupCount ?? 0 })}</>
+            )}
           </p>
         </div>
       </div>
       {canManage && isActive && (
-        <Button variant="outline" size="sm" onClick={onDisconnect}>
-          <Trash2 className="h-3 w-3" />
-          {t(($) => $.wecom.disconnect)}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={onGuestAccess}>{t(($) => $.wecom.guest_access.action)}</Button>
+          <Button variant="outline" size="sm" onClick={onDisconnect}>
+            <Trash2 className="h-3 w-3" />
+            {t(($) => $.wecom.disconnect)}
+          </Button>
+        </div>
       )}
     </div>
   );

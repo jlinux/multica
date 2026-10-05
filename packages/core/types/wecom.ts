@@ -13,6 +13,7 @@ export interface WecomInstallation {
   bot_id: string;
   installer_user_id: string;
   status: "active" | "revoked" | string;
+  guestAccess?: WecomGuestAccessSummary;
 }
 
 export interface ListWecomInstallationsResponse {
@@ -50,4 +51,30 @@ export interface RedeemWecomBindingTokenResponse {
   workspace_id: string;
   installation_id: string;
   wecom_user_id: string;
+}
+
+/** Member-visible summary; complete policy and candidate groups are admin-only. */
+export interface WecomGuestAccessSummary {
+  status: "enabled" | "disabled" | "unavailable" | string;
+  allowedGroupCount: number;
+  allowDirectMessages: boolean;
+}
+
+export interface WecomGuestAccess {
+  enabled: boolean;
+  allowedGroupIds: string[];
+  allowDirectMessages: boolean;
+  version: string;
+  source: "database" | "environment" | "none" | string;
+  sponsorUserId: string;
+  updatedBy: string | null;
+  updatedAt: string | null;
+  groups: { chatId: string; name: string | null }[];
+}
+
+export interface UpdateWecomGuestAccessRequest {
+  enabled: boolean;
+  allowedGroupIds: string[];
+  allowDirectMessages: boolean;
+  version: string;
 }

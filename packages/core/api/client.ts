@@ -187,6 +187,8 @@ import type {
   RegisterDingTalkBYORequest,
   RedeemDingTalkBindingTokenResponse,
   WecomInstallation,
+  WecomGuestAccess,
+  UpdateWecomGuestAccessRequest,
   ListWecomInstallationsResponse,
   RegisterWecomBYORequest,
   RedeemWecomBindingTokenResponse,
@@ -387,6 +389,7 @@ import {
   EMPTY_LIST_DINGTALK_GROUPS_RESPONSE,
   EMPTY_REDEEM_DINGTALK_BINDING_TOKEN_RESPONSE,
   WecomInstallationSchema,
+  WecomGuestAccessSchema,
   ListWecomInstallationsResponseSchema,
   RedeemWecomBindingTokenResponseSchema,
   EMPTY_WECOM_INSTALLATION,
@@ -4664,6 +4667,41 @@ export class ApiClient {
       EMPTY_LIST_WECOM_INSTALLATIONS_RESPONSE,
       { endpoint: "GET /api/workspaces/:id/wecom/installations" },
     );
+  }
+
+  async getWecomGuestAccess(workspaceId: string, installationId: string): Promise<WecomGuestAccess> {
+    const raw = await this.fetch<unknown>(
+      `/api/workspaces/${workspaceId}/wecom/installations/${installationId}/guest-access`,
+    );
+    const policy = parseWithFallback<WecomGuestAccess | null>(raw, WecomGuestAccessSchema, null, {
+      endpoint: "GET /api/workspaces/:id/wecom/installations/:installationId/guest-access",
+    });
+    if (policy === null) throw new Error("Invalid WeCom guest access response");
+    return policy;
+  }
+
+  async updateWecomGuestAccess(
+    workspaceId: string,
+    installationId: string,
+    body: UpdateWecomGuestAccessRequest,
+  ): Promise<WecomGuestAccess> {
+    const raw = await this.fetch<unknown>(
+      `/api/workspaces/${workspaceId}/wecom/installations/${installationId}/guest-access`,
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          enabled: body.enabled,
+          allowed_group_ids: body.allowedGroupIds,
+          allow_direct_messages: body.allowDirectMessages,
+          version: body.version,
+        }),
+      },
+    );
+    const policy = parseWithFallback<WecomGuestAccess | null>(raw, WecomGuestAccessSchema, null, {
+      endpoint: "PUT /api/workspaces/:id/wecom/installations/:installationId/guest-access",
+    });
+    if (policy === null) throw new Error("Invalid WeCom guest access response");
+    return policy;
   }
 
   // registerWecomBYO performs a bring-your-own-app install: the admin pastes

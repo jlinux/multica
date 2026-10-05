@@ -3070,6 +3070,40 @@ export const EMPTY_REDEEM_DINGTALK_BINDING_TOKEN_RESPONSE: RedeemDingTalkBinding
 // state rather than a Connect dialog whose submit is guaranteed to fail), and a
 // missing `status` defaults to "revoked" rather than "active" so a broken read
 // never shows a bot as connected when it may not be.
+export const WecomGuestAccessSummarySchema = z.object({
+  status: z.string(),
+  allowed_group_count: z.number().int().nonnegative(),
+  allow_direct_messages: z.boolean(),
+}).transform((value) => ({
+  status: value.status,
+  allowedGroupCount: value.allowed_group_count,
+  allowDirectMessages: value.allow_direct_messages,
+}));
+
+// Complete policy is intentionally required: defaulting a malformed load could
+// overwrite valid grants when an administrator saves the apparent defaults.
+export const WecomGuestAccessSchema = z.object({
+  enabled: z.boolean(),
+  allowed_group_ids: z.array(z.string()),
+  allow_direct_messages: z.boolean(),
+  version: z.string().min(1),
+  source: z.string(),
+  sponsor_user_id: z.string(),
+  updated_by: z.string().nullable(),
+  updated_at: z.string().nullable(),
+  groups: z.array(z.object({ chat_id: z.string().min(1), name: z.string().nullable() })),
+}).transform((value) => ({
+  enabled: value.enabled,
+  allowedGroupIds: value.allowed_group_ids,
+  allowDirectMessages: value.allow_direct_messages,
+  version: value.version,
+  source: value.source,
+  sponsorUserId: value.sponsor_user_id,
+  updatedBy: value.updated_by,
+  updatedAt: value.updated_at,
+  groups: value.groups.map((group) => ({ chatId: group.chat_id, name: group.name })),
+}));
+
 export const WecomInstallationSchema = z.object({
   id: z.string(),
   workspace_id: z.string().default(""),
@@ -3077,7 +3111,13 @@ export const WecomInstallationSchema = z.object({
   bot_id: z.string().default(""),
   installer_user_id: z.string().default(""),
   status: z.string().default("revoked"),
-}).loose();
+  guest_access: WecomGuestAccessSummarySchema.catch({
+    status: "unavailable", allowedGroupCount: 0, allowDirectMessages: false,
+  }).optional(),
+}).loose().transform(({ guest_access, ...installation }) => ({
+  ...installation,
+  guestAccess: guest_access,
+}));
 
 export const EMPTY_WECOM_INSTALLATION: WecomInstallation = {
   id: "",
