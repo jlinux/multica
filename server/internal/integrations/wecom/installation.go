@@ -262,7 +262,9 @@ func (s *InstallationService) Upsert(ctx context.Context, p InstallationParams) 
 	for key, value := range replacement {
 		merged[key] = value
 	}
-	if (carried.ID.Valid && (carried.BotID != p.BotID || carried.Status != InstallationActive)) || reclaimErr == nil {
+	// A fresh row cannot prove continuity with a legacy installation: workspace
+	// deletion may have removed its last revoked policy. Start explicitly disabled.
+	if !carried.ID.Valid || carried.BotID != p.BotID || carried.Status != InstallationActive || reclaimErr == nil {
 		merged["guest_access"] = channelaccess.DisabledWecomPolicy()
 	}
 	cfg, err = json.Marshal(merged)

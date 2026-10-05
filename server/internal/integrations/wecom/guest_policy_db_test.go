@@ -9,6 +9,7 @@ import (
 	"time"
 
 	guuid "github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/multica-ai/multica/server/internal/channelaccess"
 	"github.com/multica-ai/multica/server/internal/testutil"
 	"github.com/multica-ai/multica/server/internal/util"
@@ -32,18 +33,36 @@ func TestWecomGuestPolicyLifecycleAndSnapshotRevocation(t *testing.T) {
 	grant := channelaccess.WecomGrant{BotID: params.BotID, WorkspaceID: ws, AgentID: agent, SponsorUserID: user, AllowedGroupIDs: []string{"z", "a"}}
 	env, _ := json.Marshal([]channelaccess.WecomGrant{grant})
 	t.Setenv(channelaccess.WecomEnv, string(env))
-	inst, err := svc.Upsert(ctx, params)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fx.Cleanup(t, "DELETE FROM channel_installation WHERE workspace_id=$1", ws)
+	inst := seedLegacyGuestInstallation(t, fx, svc, params)
 	initial, err := policySvc.Get(ctx, inst.ID, params.WorkspaceID)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if !initial.Enabled || initial.Source != "environment" {
+		t.Fatal("existing legacy installation lost ENV access")
+	}
+	params.Secret = "legacy-rotated-test-secret"
+	legacyRotated, err := svc.Upsert(ctx, params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secret, err := svc.box.Open(legacyRotated.SecretEncrypted)
+	if err != nil || string(secret) != params.Secret {
+		t.Fatalf("legacy credential rotation lost secret: %v", err)
+	}
+	beforeSave, err := policySvc.Get(ctx, inst.ID, params.WorkspaceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !beforeSave.Enabled || beforeSave.Source != "environment" || beforeSave.Version != initial.Version {
+		t.Fatal("same bot legacy rotation lost ENV policy or changed version")
+	}
 	saved, err := policySvc.Save(ctx, inst.ID, params.WorkspaceID, params.InstallerUserID, GuestAccessUpdate{Enabled: true, AllowedGroupIDs: []string{"a", "z"}, Version: initial.Version})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !saved.Enabled || saved.Source != "database" {
+		t.Fatal("equivalent first save did not take over legacy policy")
 	}
 	snapshot := grant.Snapshot("external", "a", "group")
 	if err := channelaccess.ValidateWecomActor(ctx, db.New(pool), snapshot); err != nil {
@@ -101,6 +120,130 @@ func TestWecomGuestPolicyLifecycleAndSnapshotRevocation(t *testing.T) {
 	}
 	if restored.Enabled || restored.Source != "database" {
 		t.Fatal("bot swap back revived ENV")
+	}
+}
+
+// Pre-upgrade installations have sealed credentials but no database guest
+// policy. Seed that historical state directly rather than via today's Upsert.
+func seedLegacyGuestInstallation(t *testing.T, fx *testutil.Fixture, svc *InstallationService, p InstallationParams) Installation {
+	t.Helper()
+	sealed, err := svc.box.Seal([]byte(p.Secret))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := encodeInstallConfig(Installation{BotID: p.BotID, SecretEncrypted: sealed})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := fx.Insert(t, "channel_installation", testutil.Cols{
+		"workspace_id": p.WorkspaceID, "agent_id": p.AgentID, "channel_type": "wecom",
+		"config": cfg, "installer_user_id": p.InstallerUserID, "status": "active",
+	})
+	inst, err := svc.GetInWorkspace(context.Background(), util.MustParseUUID(id), p.WorkspaceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return inst
+}
+
+func TestWecomGuestPolicyFreshInstallDefaultsDisabledDespiteEnvironment(t *testing.T) {
+	pool := reclaimTestDB(t)
+	fx := testutil.New(pool, "", "")
+	suffix := guuid.NewString()
+	fx.UserID = fx.User(t, "fresh sponsor", "fresh-"+suffix+"@example.test")
+	fx.WorkspaceID = fx.Workspace(t, "fresh install", "fresh-"+suffix)
+	fx.Member(t, fx.WorkspaceID, fx.UserID, "member")
+	agent := fx.Agent(t, "fresh agent", fx.Runtime(t, "fresh runtime"))
+	svc, _ := newReclaimSvc(t, pool)
+	p := InstallationParams{WorkspaceID: util.MustParseUUID(fx.WorkspaceID), AgentID: util.MustParseUUID(agent), InstallerUserID: util.MustParseUUID(fx.UserID), BotID: "fresh-" + suffix, Secret: "fresh-test-secret"}
+	grant := channelaccess.WecomGrant{BotID: p.BotID, WorkspaceID: fx.WorkspaceID, AgentID: agent, SponsorUserID: fx.UserID, AllowedGroupIDs: []string{"group"}}
+	env, err := json.Marshal([]channelaccess.WecomGrant{grant})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(channelaccess.WecomEnv, string(env))
+	ctx := context.Background()
+	inst, err := svc.Upsert(ctx, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fx.Cleanup(t, "DELETE FROM channel_installation WHERE workspace_id=$1", fx.WorkspaceID)
+	policy, err := (&GuestAccessService{Queries: db.New(pool), Tx: pool}).Get(ctx, inst.ID, p.WorkspaceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if policy.Enabled || policy.Source != "database" {
+		t.Fatalf("fresh install revived ENV grant: enabled=%v source=%s", policy.Enabled, policy.Source)
+	}
+	if err := channelaccess.ValidateWecomActor(ctx, db.New(pool), grant.Snapshot("external", "group", "group")); !errors.Is(err, channelaccess.ErrWecomAccessDenied) {
+		t.Fatalf("fresh install accepted ENV snapshot: %v", err)
+	}
+}
+
+func TestWecomGuestPolicyDeletedReclaimedWorkspaceDoesNotReviveEnvironment(t *testing.T) {
+	pool := reclaimTestDB(t)
+	base := testutil.New(pool, "", "")
+	suffix := guuid.NewString()
+	user := base.User(t, "deleted reclaim sponsor", "deleted-reclaim-"+suffix+"@example.test")
+	wsX := base.Workspace(t, "original workspace", "original-"+suffix)
+	wsY := base.Workspace(t, "temporary workspace", "temporary-"+suffix)
+	fxX, fxY := testutil.New(pool, wsX, user), testutil.New(pool, wsY, user)
+	fxX.Member(t, wsX, user, "member")
+	fxY.Member(t, wsY, user, "member")
+	agentX := fxX.Agent(t, "original agent", fxX.Runtime(t, "original runtime"))
+	agentY := fxY.Agent(t, "temporary agent", fxY.Runtime(t, "temporary runtime"))
+	svc, _ := newReclaimSvc(t, pool)
+	q := db.New(pool)
+	policySvc := GuestAccessService{Queries: q, Tx: pool}
+	ctx := context.Background()
+	p := InstallationParams{WorkspaceID: util.MustParseUUID(wsX), AgentID: util.MustParseUUID(agentX), InstallerUserID: util.MustParseUUID(user), BotID: "deleted-reclaim-" + suffix, Secret: "test-secret"}
+	grant := channelaccess.WecomGrant{BotID: p.BotID, WorkspaceID: wsX, AgentID: agentX, SponsorUserID: user, AllowedGroupIDs: []string{"group"}}
+	env, err := json.Marshal([]channelaccess.WecomGrant{grant})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(channelaccess.WecomEnv, string(env))
+	legacy := seedLegacyGuestInstallation(t, fxX, svc, p)
+	snapshot := grant.Snapshot("external", "group", "group")
+	if err := channelaccess.ValidateWecomActor(ctx, q, snapshot); err != nil {
+		t.Fatalf("legacy ENV grant unavailable before revoke: %v", err)
+	}
+	if err := svc.Revoke(ctx, legacy.ID); err != nil {
+		t.Fatal(err)
+	}
+	moved := p
+	moved.WorkspaceID, moved.AgentID = util.MustParseUUID(wsY), util.MustParseUUID(agentY)
+	reclaimed, err := svc.Upsert(ctx, moved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reclaimed.ID == legacy.ID {
+		t.Fatal("move did not reclaim original installation")
+	}
+	movedPolicy, err := policySvc.Get(ctx, reclaimed.ID, moved.WorkspaceID)
+	if err != nil || movedPolicy.Enabled || movedPolicy.Source != "database" {
+		t.Fatalf("move lost disabled policy: %+v %v", movedPolicy, err)
+	}
+	if err := q.DeleteWorkspace(ctx, moved.WorkspaceID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := q.GetChannelInstallationByAppID(ctx, db.GetChannelInstallationByAppIDParams{ChannelType: "wecom", AppID: p.BotID}); !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("DeleteWorkspace did not remove last installation: %v", err)
+	}
+	reinstalled, err := svc.Upsert(ctx, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fxX.Cleanup(t, "DELETE FROM channel_installation WHERE workspace_id=$1", wsX)
+	policy, err := policySvc.Get(ctx, reinstalled.ID, p.WorkspaceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if policy.Enabled || policy.Source != "database" {
+		t.Fatalf("reinstall after deleted tombstone revived ENV: enabled=%v source=%s", policy.Enabled, policy.Source)
+	}
+	if err := channelaccess.ValidateWecomActor(ctx, q, snapshot); !errors.Is(err, channelaccess.ErrWecomAccessDenied) {
+		t.Fatalf("deleted tombstone revived pre-revocation snapshot: %v", err)
 	}
 }
 
