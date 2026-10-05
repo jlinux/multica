@@ -1,6 +1,7 @@
 package lark
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -236,8 +237,8 @@ func newFeishuFactory(deps FeishuChannelDeps) channel.Factory {
 // counterpart of the old per-feishu boot list) and manages the per-installation
 // WS lease, translating each row into the engine's Installation: ChannelType
 // selects the Factory, Config carries the platform config JSONB (verbatim), and
-// Fingerprint is a generic hash over channel_type + config so a credential
-// rotation forces a reconnect for any platform.
+// Fingerprint hashes channel_type + connection config so a credential rotation
+// forces a reconnect for any platform; WeCom guest policy is excluded.
 type channelInstallationStore struct {
 	q *db.Queries
 }
@@ -315,14 +316,28 @@ var _ engine.LeaseStore = (*channelInstallationStore)(nil)
 
 // rowFingerprint condenses the credential-bearing config of a
 // channel_installation row into an opaque string. Any change to the platform
-// config (Feishu rotates app_id / app_secret / region on re-install) flips the
-// fingerprint and the Supervisor restarts the connection. The config JSONB
-// carries only the secret ciphertext (never plaintext), so hashing it is safe
-// and channel-agnostic — no platform field is read directly.
+// connection config flips the fingerprint and the Supervisor restarts the
+// connection. WeCom guest_access is read fresh for authorization and must not
+// restart the connection when edited. The config carries secret ciphertext,
+// never plaintext.
 func rowFingerprint(row db.ChannelInstallation) string {
+	config := row.Config
+	if row.ChannelType == "wecom" && json.Valid(config) {
+		var fields map[string]any
+		decoder := json.NewDecoder(bytes.NewReader(config))
+		decoder.UseNumber()
+		if decoder.Decode(&fields) == nil && fields != nil {
+			delete(fields, "guest_access")
+			// Canonicalize both legacy and saved configs so the first policy save
+			// does not rotate the connection merely due to JSON formatting.
+			if canonical, err := json.Marshal(fields); err == nil {
+				config = canonical
+			}
+		}
+	}
 	h := sha256.New()
 	_, _ = h.Write([]byte(row.ChannelType))
 	_, _ = h.Write([]byte{0})
-	_, _ = h.Write(row.Config)
+	_, _ = h.Write(config)
 	return hex.EncodeToString(h.Sum(nil))
 }
