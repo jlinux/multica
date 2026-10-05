@@ -21,7 +21,7 @@ func TestWecomGuestTaskAuthorization(t *testing.T) {
 	user := base.User(t, "guest sponsor", "guest-"+suffix+"@example.test")
 	ws := base.Workspace(t, "guest workspace", "guest-"+suffix)
 	fx := testutil.New(pool, ws, user)
-	fx.Member(t, ws, user, "admin")
+	fx.Member(t, ws, user, "member")
 	runtime := fx.Runtime(t, "guest-runtime")
 	agent := fx.Agent(t, "guest-agent", runtime)
 	grant := channelaccess.WecomGrant{BotID: "bot-" + suffix, WorkspaceID: ws, AgentID: agent, SponsorUserID: user, AllowedGroupIDs: []string{"group"}}
@@ -132,11 +132,11 @@ func TestWecomGuestTaskAuthorization(t *testing.T) {
 		t.Fatal("revoked installation allowed")
 	}
 	fx.Exec(t, "UPDATE channel_installation SET status='active' WHERE id=$1", installation)
-	fx.Exec(t, "UPDATE member SET role='member' WHERE workspace_id=$1 AND user_id=$2", ws, user)
+	fx.Exec(t, "DELETE FROM member WHERE workspace_id=$1 AND user_id=$2", ws, user)
 	if svc.ValidateWecomGuestTask(ctx, task) == nil {
-		t.Fatal("demoted sponsor allowed")
+		t.Fatal("removed sponsor allowed")
 	}
-	fx.Exec(t, "UPDATE member SET role='admin' WHERE workspace_id=$1 AND user_id=$2", ws, user)
+	fx.Member(t, ws, user, "member")
 	t.Setenv(channelaccess.WecomEnv, "")
 	if svc.ValidateWecomGuestTask(ctx, task) == nil {
 		t.Fatal("revoked grant allowed")

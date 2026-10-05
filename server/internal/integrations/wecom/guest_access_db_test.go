@@ -22,7 +22,7 @@ func TestGuestAccessRealResolverAndIsolatedGroupDB(t *testing.T) {
 	suffix := googleuuid.NewString()
 	fx.UserID = fx.User(t, "sponsor", "guest-sponsor-"+suffix+"@example.test")
 	fx.WorkspaceID = fx.Workspace(t, "guest access", "guest-"+suffix)
-	fx.Member(t, fx.WorkspaceID, fx.UserID, "owner")
+	fx.Member(t, fx.WorkspaceID, fx.UserID, "member")
 	runtime := fx.Runtime(t, "guest runtime")
 	agent := fx.Agent(t, "guest agent", runtime)
 	bot := "bot-" + suffix
@@ -151,8 +151,8 @@ func TestGuestAccessRealResolverAndIsolatedGroupDB(t *testing.T) {
 	}
 
 	// Revoked guest access must not tear down the shared bot connection.
-	fx.Exec(t, "UPDATE member SET role='member' WHERE workspace_id=$1 AND user_id=$2", fx.WorkspaceID, fx.UserID)
-	deniedMessage := message("alice", "question after sponsor demotion")
+	fx.Exec(t, "DELETE FROM member WHERE workspace_id=$1 AND user_id=$2", fx.WorkspaceID, fx.UserID)
+	deniedMessage := message("alice", "question after sponsor removal")
 	if err := router.Handle(ctx, deniedMessage); err != nil {
 		t.Fatalf("denial failed connector: %v", err)
 	}

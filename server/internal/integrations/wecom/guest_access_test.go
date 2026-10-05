@@ -31,7 +31,7 @@ func guestFixture(t *testing.T) (guestActors, engine.ResolvedInstallation, chann
 	grant := channelaccess.WecomGrant{BotID: "bot", WorkspaceID: "11111111-1111-1111-1111-111111111111", AgentID: "22222222-2222-2222-2222-222222222222", SponsorUserID: "33333333-3333-3333-3333-333333333333", AllowedGroupIDs: []string{"group"}}
 	raw, _ := json.Marshal([]channelaccess.WecomGrant{grant})
 	t.Setenv(channelaccess.WecomEnv, string(raw))
-	return guestActors{agent: db.Agent{ID: agent, WorkspaceID: ws, OwnerID: sponsor}, member: db.Member{Role: "admin"}}, engine.ResolvedInstallation{WorkspaceID: ws, AgentID: agent, Active: true, Platform: Installation{BotID: "bot"}}, channel.InboundMessage{Source: channel.Source{ChatID: "group", ChatType: channel.ChatTypeGroup, SenderID: "visitor"}}, grant.Snapshot("visitor", "group", "group")
+	return guestActors{agent: db.Agent{ID: agent, WorkspaceID: ws, OwnerID: sponsor}, member: db.Member{Role: "member"}}, engine.ResolvedInstallation{WorkspaceID: ws, AgentID: agent, Active: true, Platform: Installation{BotID: "bot"}}, channel.InboundMessage{Source: channel.Source{ChatID: "group", ChatType: channel.ChatTypeGroup, SenderID: "visitor"}}, grant.Snapshot("visitor", "group", "group")
 }
 func TestResolveWecomGuestScope(t *testing.T) {
 	q, inst, msg, _ := guestFixture(t)

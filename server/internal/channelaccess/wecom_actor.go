@@ -32,15 +32,15 @@ func ValidateWecomActor(ctx context.Context, q WecomActorQueries, s *WecomGuest)
 	if agent.WorkspaceID != workspaceID || agent.OwnerID != sponsorID || agent.ArchivedAt.Valid {
 		return denied("WeCom guest sponsor must own the active agent")
 	}
-	member, err := q.GetMemberByUserAndWorkspace(ctx, db.GetMemberByUserAndWorkspaceParams{WorkspaceID: workspaceID, UserID: sponsorID})
+	// The server operator grants access through WecomEnv. The sponsor is the
+	// execution identity, not the administrator configuring that grant; retain
+	// ownership and workspace membership without elevating their workspace role.
+	_, err = q.GetMemberByUserAndWorkspace(ctx, db.GetMemberByUserAndWorkspaceParams{WorkspaceID: workspaceID, UserID: sponsorID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return denied("WeCom guest actor no longer exists")
 	}
 	if err != nil {
 		return err
-	}
-	if member.Role != "owner" && member.Role != "admin" {
-		return denied("WeCom guest sponsor must be a workspace administrator")
 	}
 	return nil
 }

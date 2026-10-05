@@ -26,13 +26,15 @@ func TestGuestAcceptancePersistentConnectionDB(t *testing.T) {
 	suffix := googleuuid.NewString()
 	fx.UserID = fx.User(t, "acceptance sponsor", "acceptance-"+suffix+"@example.test")
 	fx.WorkspaceID = fx.Workspace(t, "acceptance", "acceptance-"+suffix)
-	fx.Member(t, fx.WorkspaceID, fx.UserID, "admin")
+	fx.Member(t, fx.WorkspaceID, fx.UserID, "member")
 	runtime := fx.Runtime(t, "acceptance runtime")
 	agent := fx.Agent(t, "acceptance agent", runtime)
 	bot := "acceptance-bot-" + suffix
 	cfg, _ := json.Marshal(map[string]string{"app_id": bot, "bot_id": bot, "app_secret_encrypted": ""})
 	installation := fx.Insert(t, "channel_installation", dbfx.Cols{"workspace_id": fx.WorkspaceID, "agent_id": agent, "channel_type": "wecom", "config": cfg, "installer_user_id": fx.UserID, "status": "active"})
-	fx.Insert(t, "channel_user_binding", dbfx.Cols{"workspace_id": fx.WorkspaceID, "multica_user_id": fx.UserID, "installation_id": installation, "channel_type": "wecom", "channel_user_id": "bound"})
+	boundUser := fx.User(t, "bound member", "bound-"+suffix+"@example.test")
+	fx.Member(t, fx.WorkspaceID, boundUser, "member")
+	fx.Insert(t, "channel_user_binding", dbfx.Cols{"workspace_id": fx.WorkspaceID, "multica_user_id": boundUser, "installation_id": installation, "channel_type": "wecom", "channel_user_id": "bound"})
 	grant := channelaccess.WecomGrant{BotID: bot, WorkspaceID: fx.WorkspaceID, AgentID: agent, SponsorUserID: fx.UserID, AllowedGroupIDs: []string{"allowed-group"}}
 	raw, _ := json.Marshal([]channelaccess.WecomGrant{grant})
 	t.Setenv(channelaccess.WecomEnv, string(raw))
@@ -60,7 +62,7 @@ func TestGuestAcceptancePersistentConnectionDB(t *testing.T) {
 		{"alice", "blocked-group", "group", "not allowed group"},
 		{"alice", "private-chat", "single", "private not allowed"},
 		{"alice", "allowed-group", "group", "/issue do not create"},
-		{"alice", "allowed-group", "group", "after demotion"},
+		{"alice", "allowed-group", "group", "after removal"},
 		{"bound", "allowed-group", "group", "member still works"},
 	}
 	frames := make([][]byte, 0, len(turns))
@@ -81,9 +83,9 @@ func TestGuestAcceptancePersistentConnectionDB(t *testing.T) {
 	conn := &floodConn{frames: frames, delivered: make(chan struct{}), unblock: make(chan struct{})}
 	handled := make(chan string, len(turns))
 	c := &wecomChannel{installationID: util.MustParseUUID(installation), botID: bot, secret: "local-test-only", dialer: scriptedDialer{conn: conn}, wsURL: "wss://example.test/local-acceptance", senders: newSendersRegistry(), handler: func(ctx context.Context, msg channel.InboundMessage) error {
-		if msg.Text == "after demotion" {
-			if _, err := pool.Exec(ctx, "UPDATE member SET role='member' WHERE workspace_id=$1 AND user_id=$2", fx.WorkspaceID, fx.UserID); err != nil {
-				return fmt.Errorf("demote test sponsor: %w", err)
+		if msg.Text == "after removal" {
+			if _, err := pool.Exec(ctx, "DELETE FROM member WHERE workspace_id=$1 AND user_id=$2", fx.WorkspaceID, fx.UserID); err != nil {
+				return fmt.Errorf("remove test sponsor: %w", err)
 			}
 		}
 		msg.SkipAgentRun = true
@@ -152,5 +154,5 @@ func TestGuestAcceptancePersistentConnectionDB(t *testing.T) {
 	if got := fx.Count(t, `SELECT count(*) FROM channel_inbound_message_dedup WHERE installation_id=$1`, installation); got != len(turns) {
 		t.Fatalf("dedup callbacks: %d", got)
 	}
-	t.Log("PASS: raw callbacks, isolated A/B histories, group/private access denied, guest issue blocked, sponsor demotion denied, bound member continues on same connection")
+	t.Log("PASS: raw callbacks, isolated A/B histories, group/private access denied, guest issue blocked, removed sponsor denied, bound member continues on same connection")
 }

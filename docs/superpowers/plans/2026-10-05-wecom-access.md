@@ -4,6 +4,8 @@
 
 Goal: permit explicitly authorized WeCom visitors without creating Multica users, and isolate group conversations by sender.
 
+Subsequent approved adjustment (2026-10-05): the server operator configures the grant; its sponsor is the agent owner and an existing workspace member, not necessarily an owner/admin. This supersedes the sponsor-role requirement below. Deployment and enabling the existing groups were subsequently authorized. See `docs/wecom-guest-access.md` for the current contract.
+
 Architecture: reuse installation, binding config, chat/task queue and outbound transport. Operator-managed MULTICA_WECOM_GUEST_ACCESS grants bind exact bot/workspace/agent/sponsor and allowed chats. Grants default off; runtime capabilities remain administrator-managed. Guest sessions retain a separate sender and grant snapshot; task provenance identifies delegated channel access rather than a human-authored request. Revalidate before task launch and reject revoked grants. Never silently substitute an installer as a guest.
 
 Global constraints: preserve members-only defaults; do not modify production or merge upstream; no database migration; no arbitrary guest /issue command; /new and /clear retain per-sender boundaries; all outbound text/files/relay use the real chat ID. Grant sponsor must be the agent owner and a workspace owner/admin. Guest runs do not inherit personal connected-app overlays. Default runtime tools are NOT sandboxed by this feature; enable only after administrator configures the selected agent/runtime appropriately.
