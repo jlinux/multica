@@ -320,6 +320,13 @@ func (r *Router) dispatch(ctx context.Context, set ResolverSet, msg channel.Inbo
 	}
 
 	res, finalize, err := r.processClaimed(ctx, set, msg, inst, claimToken, bareFresh, startChat)
+	// Access revocation is a terminal business outcome, including checks in
+	// session creation and /new preparation. Propagating it as infrastructure
+	// failure would close the shared bot connection and replay this callback.
+	if errors.Is(err, channelaccess.ErrWecomAccessDenied) {
+		res = r.drop(ctx, set, msg, inst.ID, DropReasonGuestAccessDenied)
+		finalize, err = finalizeMark, nil
+	}
 
 	if claimed && finalize != finalizeNone {
 		finalizeCtx, finalizeCancel := context.WithTimeout(context.WithoutCancel(ctx), dedupFinalizeTimeout)

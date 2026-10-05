@@ -32,7 +32,7 @@ func resolveWecomGuest(ctx context.Context, q channelaccess.WecomActorQueries, i
 		return engine.ResolvedIdentity{}, engine.ErrSenderUnbound
 	}
 	if grant.WorkspaceID != util.UUIDToString(inst.WorkspaceID) || grant.AgentID != util.UUIDToString(inst.AgentID) {
-		return engine.ResolvedIdentity{}, errors.New("WeCom guest grant does not match installation")
+		return engine.ResolvedIdentity{}, fmt.Errorf("%w: grant does not match installation", channelaccess.ErrWecomAccessDenied)
 	}
 	guest := grant.Snapshot(msg.Source.SenderID, msg.Source.ChatID, string(msg.Source.ChatType))
 	if err := channelaccess.ValidateWecomActor(ctx, q, guest); err != nil {

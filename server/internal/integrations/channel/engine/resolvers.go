@@ -40,6 +40,7 @@ const (
 type DropReason string
 
 const (
+	DropReasonGuestAccessDenied   DropReason = "guest_access_denied"
 	DropReasonUnboundUser         DropReason = "unbound_user"
 	DropReasonNonWorkspaceMember  DropReason = "non_workspace_member"
 	DropReasonNotAddressedInGroup DropReason = "not_addressed_in_group"

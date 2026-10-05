@@ -2,6 +2,8 @@ package engine
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/multica-ai/multica/server/internal/channelaccess"
 	"github.com/multica-ai/multica/server/internal/integrations/channel"
@@ -84,4 +86,58 @@ func (b *guestContextBinder) EnsureSession(ctx context.Context, p EnsureSessionP
 func (b *guestContextBinder) StartSession(ctx context.Context, p StartSessionParams) (StartSessionResult, error) {
 	b.guest = channelaccess.WecomGuestFromContext(ctx)
 	return b.fakeBinder.StartSession(ctx, p)
+}
+
+// Access can be revoked at identity resolution or at a later transactional
+// check. Neither is a transport failure; database errors must remain retryable.
+func TestGuestAccessDeniedDoesNotFailConnector(t *testing.T) {
+	for _, stage := range []string{"identity", "session", "new_prepare", "new_transaction"} {
+		for _, denied := range []bool{true, false} {
+			t.Run(fmt.Sprintf("%s/denied=%t", stage, denied), func(t *testing.T) {
+				h := newHarness(t)
+				cause := error(context.DeadlineExceeded)
+				if denied {
+					cause = channelaccess.ErrWecomAccessDenied
+				}
+				failure := fmt.Errorf("authorization lookup: %w", cause)
+				msg := p2pMessage(t)
+				switch stage {
+				case "identity":
+					h.ident.err = failure
+				case "session":
+					h.binder.ensureErr = failure
+				case "new_prepare":
+					msg.Text = "/new question"
+					h.tasks.prepareErr = failure
+				case "new_transaction":
+					msg.Text = "/new question"
+					h.binder.startErr = failure
+				}
+				err := h.router.Handle(context.Background(), msg)
+				h.router.Drain(context.Background())
+				if denied {
+					if err != nil {
+						t.Fatalf("authorization denial escaped to connector: %v", err)
+					}
+					if h.dedup.marks() != 1 || h.dedup.releases() != 0 {
+						t.Fatal("denied callback was left retryable")
+					}
+					if reason, ok := h.audit.last(); !ok || reason != DropReason("guest_access_denied") {
+						t.Fatalf("missing denial audit: %v %v", reason, ok)
+					}
+					replies := h.replier.calls()
+					if len(replies) != 1 || replies[0].Outcome != OutcomeDropped {
+						t.Fatalf("unexpected outcome: %+v", replies)
+					}
+				} else {
+					if !errors.Is(err, context.DeadlineExceeded) {
+						t.Fatalf("database failure swallowed: %v", err)
+					}
+					if h.dedup.marks() != 0 || h.dedup.releases() != 1 {
+						t.Fatal("database failure cannot retry")
+					}
+				}
+			})
+		}
+	}
 }

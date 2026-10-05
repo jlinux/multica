@@ -45,8 +45,8 @@ func TestResolveWecomGuestScope(t *testing.T) {
 	}
 	msg.Source.ChatID = "group"
 	inst.AgentID = inst.WorkspaceID
-	if _, err = resolveWecomGuest(context.Background(), q, inst, msg); err == nil {
-		t.Fatal("different agent allowed")
+	if _, err = resolveWecomGuest(context.Background(), q, inst, msg); !errors.Is(err, channelaccess.ErrWecomAccessDenied) {
+		t.Fatalf("installation mismatch must be an access denial: %v", err)
 	}
 }
 func TestGuestRouteSeparatesIdentityAndGrant(t *testing.T) {

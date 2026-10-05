@@ -149,4 +149,18 @@ func TestGuestAccessRealResolverAndIsolatedGroupDB(t *testing.T) {
 	if count != 0 {
 		t.Fatal("guest created a member binding")
 	}
+
+	// Revoked guest access must not tear down the shared bot connection.
+	fx.Exec(t, "UPDATE member SET role='member' WHERE workspace_id=$1 AND user_id=$2", fx.WorkspaceID, fx.UserID)
+	deniedMessage := message("alice", "question after sponsor demotion")
+	if err := router.Handle(ctx, deniedMessage); err != nil {
+		t.Fatalf("denial failed connector: %v", err)
+	}
+	if _, err := (&deduper{store: store}).Claim(ctx, inst.ID, deniedMessage.MessageID); !errors.Is(err, engine.ErrDuplicate) {
+		t.Fatalf("denied callback not finalized: %v", err)
+	}
+	var deniedCount int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM channel_inbound_audit WHERE installation_id=$1 AND drop_reason='guest_access_denied'`, installation).Scan(&deniedCount); err != nil || deniedCount != 1 {
+		t.Fatalf("denial audit: %d %v", deniedCount, err)
+	}
 }
