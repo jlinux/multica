@@ -80,7 +80,7 @@ Account binding only confirms who the sender is. Other members on the chat platf
 
 ## WeCom guest access
 
-Workspace owners and admins can allow people without Multica accounts through **Settings → WeCom → Guest access**:
+New installations start with guest access disabled. Workspace owners and admins can allow people without Multica accounts through **Settings → WeCom → Guest access**:
 
 1. Enable guest access.
 2. Select known groups or add their exact group IDs manually. Groups without existing records require manual entry; wildcard access to all groups is not supported.
@@ -91,7 +91,7 @@ Group messages still require an @-mention. Session isolation does not hide repli
 
 Saved settings take effect at subsequent authorization checks without a restart. Disabling or changing a grant rejects tasks and retries under the old grant that have not started; it does not automatically stop running tasks. Changing the agent owner or removing their workspace membership invalidates the old grant until an administrator explicitly reviews and saves it again.
 
-On self-hosted installations, existing `MULTICA_WECOM_GUEST_ACCESS` grants appear in the dialog. After the first save, database settings take precedence, including an explicit disable. Rotating credentials for the same bot preserves its policy; disconnecting or replacing the bot requires authorization again.
+For self-hosted bots installed before this feature, existing `MULTICA_WECOM_GUEST_ACCESS` grants appear in the dialog if no database policy has been saved. After the first save, database settings take precedence, including an explicit disable. Rotating credentials for the same bot preserves its policy; disconnecting or replacing the bot requires authorization again.
 
 Update every backend replica before releasing the settings UI. When rolling back to a version that only supports environment grants, reconcile or disable those grants first: the old backend does not read database policies and could otherwise restore revoked access.
 

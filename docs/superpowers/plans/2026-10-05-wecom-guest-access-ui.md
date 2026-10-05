@@ -8,7 +8,7 @@
 
 ## Global Constraints
 
-Follow the approved spec at docs/superpowers/specs/2026-10-05-wecom-guest-access-ui-design.md and CLAUDE.md. Continue on existing feat/wecom-guest-access branch. No production writes, real bot messages, secrets in output, or unrelated changes. Ordinary member agent owners remain valid execution sponsors. Explicit database disable and malformed database policy must never fall back to environment grants. Preserve existing grant fingerprint on equivalent first save. Keep credentials intact and isolate cross-workspace reads/writes. No wildcard group grants. New owner does not silently inherit old authorization. Existing running tasks are not automatically stopped.
+Follow the approved spec at docs/superpowers/specs/2026-10-05-wecom-guest-access-ui-design.md and CLAUDE.md. Continue on existing feat/wecom-guest-access branch. No production writes, real bot messages, secrets in output, or unrelated changes. Ordinary member agent owners remain valid execution sponsors. Explicit database disable and malformed database policy must never fall back to environment grants. Preserve existing grant fingerprint on equivalent first save. Keep credentials intact and isolate cross-workspace reads/writes. No wildcard group grants. Fresh installations explicitly start disabled; existing legacy active same-bot rows retain ENV fallback until policy save. New owner does not silently inherit old authorization. Existing running tasks are not automatically stopped.
 
 ## Shared HTTP Contract
 
@@ -45,6 +45,6 @@ Files: packages/core/{types,api,wecom}/..., packages/views/settings/components/w
 
 ## Progress
 
-- [ ] Backend
-- [ ] Frontend
+- [x] Backend
+- [x] Frontend
 - [ ] Review and local acceptance
