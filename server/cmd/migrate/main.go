@@ -890,7 +890,7 @@ func runMigrations(ctx context.Context, pool *pgxpool.Pool, opts runOptions) err
 
 	existsSQL := fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM %s WHERE version = $1)", tableIdent)
 	insertSQL := fmt.Sprintf("INSERT INTO %s (version) VALUES ($1)", tableIdent)
-	deleteSQL := fmt.Sprintf("DELETE FROM %s WHERE version = $1", tableIdent)
+	deleteSQL := fmt.Sprintf("DELETE FROM %s WHERE version = $1 OR ($2 <> '' AND version = $2)", tableIdent)
 
 	for _, file := range opts.Files {
 		version := migrations.ExtractVersion(file)
@@ -900,6 +900,21 @@ func runMigrations(ctx context.Context, pool *pgxpool.Pool, opts runOptions) err
 			return fmt.Errorf("check migration %q: %w", version, err)
 		}
 
+		legacyVersion := goalMigrationAliases[version].legacy
+		if !exists && opts.Direction == "up" {
+			adopted, err := adoptLegacyGoalMigration(ctx, conn, tableIdent, version, file)
+			if err != nil {
+				return fmt.Errorf("adopt migration %q: %w", version, err)
+			}
+			if adopted {
+				continue
+			}
+		}
+		if !exists && opts.Direction == "down" && legacyVersion != "" {
+			if err := conn.QueryRow(ctx, existsSQL, legacyVersion).Scan(&exists); err != nil {
+				return fmt.Errorf("check legacy migration %q: %w", legacyVersion, err)
+			}
+		}
 		if opts.Direction == "up" {
 			if exists {
 				fmt.Printf("  skip  %s (already applied)\n", version)
@@ -948,7 +963,7 @@ func runMigrations(ctx context.Context, pool *pgxpool.Pool, opts runOptions) err
 		if opts.Direction == "up" {
 			_, err = conn.Exec(ctx, insertSQL, version)
 		} else {
-			_, err = conn.Exec(ctx, deleteSQL, version)
+			_, err = conn.Exec(ctx, deleteSQL, version, legacyVersion)
 		}
 		if err != nil {
 			return fmt.Errorf("record migration %q: %w", version, err)
