@@ -13,6 +13,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/integrations/channel"
 	"github.com/multica-ai/multica/server/internal/integrations/channel/engine"
 	"github.com/multica-ai/multica/server/internal/util"
+	db "github.com/multica-ai/multica/server/pkg/db/generated"
 )
 
 const wecomGuestRoutePrefix = "wecom-guest-v1:"
@@ -24,7 +25,12 @@ func resolveWecomGuest(ctx context.Context, q channelaccess.WecomActorQueries, i
 	if !ok || !inst.Active || strings.TrimSpace(msg.Source.SenderID) == "" {
 		return engine.ResolvedIdentity{}, engine.ErrSenderUnbound
 	}
-	grant, err := channelaccess.LookupWecom(platform.BotID)
+	row, err := q.GetChannelInstallationByAppID(ctx, db.GetChannelInstallationByAppIDParams{ChannelType: "wecom", AppID: platform.BotID})
+	if err != nil {
+		return engine.ResolvedIdentity{}, err
+	}
+	policy, err := channelaccess.ResolveWecomInstallation(row)
+	grant := policy.Grant
 	if err != nil {
 		return engine.ResolvedIdentity{}, err
 	}
@@ -49,8 +55,10 @@ func wecomGuestSessionRoute(source channel.Source, guest *channelaccess.WecomGue
 	if guest == nil {
 		return wecomSessionRoute(source)
 	}
-	if err := channelaccess.ValidateWecomSnapshot(guest); err != nil {
-		return "", nil, err
+	// Authorization was checked against the current database policy by the
+	// identity resolver and is checked again when enqueueing the task.
+	if strings.TrimSpace(guest.SenderID) == "" || guest.GrantHash == "" {
+		return "", nil, channelaccess.ErrWecomAccessDenied
 	}
 	if guest.SenderID != source.SenderID || guest.ChatID != source.ChatID || guest.ChatType != string(source.ChatType) {
 		return "", nil, errors.New("WeCom guest route identity mismatch")

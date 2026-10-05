@@ -8,6 +8,7 @@ package wecom
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/multica-ai/multica/server/internal/channelaccess"
 	"github.com/multica-ai/multica/server/internal/integrations/channel/engine"
 	"github.com/multica-ai/multica/server/internal/util/secretbox"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
@@ -171,6 +173,10 @@ func (s *InstallationService) Upsert(ctx context.Context, p InstallationParams) 
 		return Installation{}, fmt.Errorf("wecom: lock bot routing slot: %w", err)
 	}
 
+	if err := qtx.Queries.LockChannelInstallationAgentSlot(ctx, db.LockChannelInstallationAgentSlotParams{ChannelType: channelTypeWecom, WorkspaceID: p.WorkspaceID, AgentID: p.AgentID}); err != nil {
+		return Installation{}, fmt.Errorf("wecom: lock agent slot: %w", err)
+	}
+
 	// Who holds the slot right now — read inside the lock, before anything
 	// external happens.
 	if err := botSlotConflictErr(ctx, qtx, p); err != nil {
@@ -205,14 +211,15 @@ func (s *InstallationService) Upsert(ctx context.Context, p InstallationParams) 
 	// despite the lock; botOwnerConflictErr still turns it into an accurate 409
 	// rather than a raw Postgres string. Mirrors slack/install.go's
 	// persistInstall.
-	if _, err := qtx.Queries.ReclaimDeadChannelInstallationByAppID(ctx, db.ReclaimDeadChannelInstallationByAppIDParams{
+	_, reclaimErr := qtx.Queries.ReclaimDeadChannelInstallationByAppID(ctx, db.ReclaimDeadChannelInstallationByAppIDParams{
 		ChannelType: channelTypeWecom,
 		AppID:       p.BotID,
 		WorkspaceID: p.WorkspaceID,
 		AgentID:     p.AgentID,
-	}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	})
+	if reclaimErr != nil && !errors.Is(reclaimErr, pgx.ErrNoRows) {
 		// pgx.ErrNoRows just means nothing was dead — a no-op, not a failure.
-		return Installation{}, fmt.Errorf("wecom: reclaim dead installation: %w", err)
+		return Installation{}, fmt.Errorf("wecom: reclaim dead installation: %w", reclaimErr)
 	}
 
 	// The row this upsert is about to overwrite, read on the tx handle so it is
@@ -236,6 +243,29 @@ func (s *InstallationService) Upsert(ctx context.Context, p InstallationParams) 
 		SecretEncrypted: sealed,
 		BotDisplayName:  displayName,
 	})
+	if err != nil {
+		return Installation{}, err
+	}
+
+	// Keep all same-bot configuration fields while rotating credentials. Both
+	// policy and lifecycle writes hold the same agent slot lock before reading.
+	var replacement map[string]json.RawMessage
+	if err := json.Unmarshal(cfg, &replacement); err != nil {
+		return Installation{}, err
+	}
+	merged := map[string]json.RawMessage{}
+	if carried.BotID == p.BotID {
+		if err := json.Unmarshal(carried.Config, &merged); err != nil {
+			return Installation{}, err
+		}
+	}
+	for key, value := range replacement {
+		merged[key] = value
+	}
+	if (carried.ID.Valid && (carried.BotID != p.BotID || carried.Status != InstallationActive)) || reclaimErr == nil {
+		merged["guest_access"] = channelaccess.DisabledWecomPolicy()
+	}
+	cfg, err = json.Marshal(merged)
 	if err != nil {
 		return Installation{}, err
 	}
@@ -396,10 +426,30 @@ func (s *InstallationService) botOwnerConflictErr(ctx context.Context, requestin
 // atomically. A revoked row is skipped by the router's installation resolver
 // (Active=false → invalid_event drop with audit).
 func (s *InstallationService) Revoke(ctx context.Context, id pgtype.UUID) error {
-	return s.store.Queries.SetChannelInstallationStatus(ctx, db.SetChannelInstallationStatusParams{
-		ID:     id,
-		Status: string(InstallationRevoked),
-	})
+	if s.tx == nil {
+		return errors.New("wecom: missing transaction starter")
+	}
+	tx, err := s.tx.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.store.Queries.WithTx(tx)
+	row, err := q.GetChannelInstallation(ctx, db.GetChannelInstallationParams{ID: id, ChannelType: channelTypeWecom})
+	if err != nil {
+		return err
+	}
+	inst, err := installationFromRow(row)
+	if err != nil {
+		return err
+	}
+	if err := lockInstallationSlots(ctx, q, row.WorkspaceID, row.AgentID, inst.BotID); err != nil {
+		return err
+	}
+	if err := q.RevokeWecomInstallation(ctx, db.RevokeWecomInstallationParams{ID: id, GuestAccess: channelaccess.DisabledWecomPolicy()}); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // ErrInstallationNotFound is returned by GetInWorkspace when either no row

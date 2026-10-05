@@ -31,6 +31,7 @@ type WecomGrant struct {
 	SponsorUserID       string   `json:"sponsor_user_id"`
 	AllowedGroupIDs     []string `json:"allowed_group_ids"`
 	AllowDirectMessages bool     `json:"allow_direct_messages"`
+	PolicyRevision      string   `json:"policy_revision,omitempty"`
 }
 
 // WecomGuest is persisted on the isolated session and task delivery snapshot.
@@ -113,19 +114,6 @@ func (g WecomGrant) fingerprint() string {
 }
 func (g WecomGrant) Snapshot(senderID, chatID, chatType string) *WecomGuest {
 	return &WecomGuest{BotID: g.BotID, WorkspaceID: g.WorkspaceID, AgentID: g.AgentID, SponsorUserID: g.SponsorUserID, SenderID: senderID, ChatID: chatID, ChatType: chatType, GrantHash: g.fingerprint()}
-}
-func ValidateWecomSnapshot(s *WecomGuest) error {
-	if s == nil || strings.TrimSpace(s.SenderID) == "" {
-		return denied("WeCom guest identity missing")
-	}
-	g, err := LookupWecom(s.BotID)
-	if err != nil {
-		return err
-	}
-	if g == nil || g.WorkspaceID != s.WorkspaceID || g.AgentID != s.AgentID || g.SponsorUserID != s.SponsorUserID || g.fingerprint() != s.GrantHash || !g.Allows(s.ChatID, s.ChatType) {
-		return denied("WeCom guest grant is unavailable or changed")
-	}
-	return nil
 }
 
 // GuestFromConfig never converts malformed metadata into a member session.

@@ -42,12 +42,13 @@ type WecomBindingRedeemer interface {
 // row. The secret is NEVER included — it remains sealed on the row. BotID
 // is surfaced because operators need to see which bot is bound.
 type WecomInstallationResponse struct {
-	ID              string `json:"id"`
-	WorkspaceID     string `json:"workspace_id"`
-	AgentID         string `json:"agent_id"`
-	BotID           string `json:"bot_id"`
-	InstallerUserID string `json:"installer_user_id"`
-	Status          string `json:"status"`
+	ID              string                    `json:"id"`
+	WorkspaceID     string                    `json:"workspace_id"`
+	AgentID         string                    `json:"agent_id"`
+	BotID           string                    `json:"bot_id"`
+	InstallerUserID string                    `json:"installer_user_id"`
+	Status          string                    `json:"status"`
+	GuestAccess     *wecom.GuestAccessSummary `json:"guest_access,omitempty"`
 }
 
 func wecomInstallationToResponse(inst wecom.Installation) WecomInstallationResponse {
@@ -96,7 +97,10 @@ func (h *Handler) ListWecomInstallations(w http.ResponseWriter, r *http.Request)
 	}
 	out := make([]WecomInstallationResponse, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, wecomInstallationToResponse(row))
+		response := wecomInstallationToResponse(row)
+		policy := (&wecom.GuestAccessService{Queries: h.Queries, Tx: h.TxStarter}).Summary(r.Context(), row)
+		response.GuestAccess = &policy
+		out = append(out, response)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"installations":     out,

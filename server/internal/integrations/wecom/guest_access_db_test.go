@@ -150,6 +150,24 @@ func TestGuestAccessRealResolverAndIsolatedGroupDB(t *testing.T) {
 		t.Fatal("guest created a member binding")
 	}
 
+	policies := GuestAccessService{Queries: q, Tx: pool}
+	effective, err := policies.Get(ctx, util.MustParseUUID(installation), util.MustParseUUID(fx.WorkspaceID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	persisted, err := policies.Save(ctx, util.MustParseUUID(installation), util.MustParseUUID(fx.WorkspaceID), util.MustParseUUID(fx.UserID), GuestAccessUpdate{Enabled: false, AllowedGroupIDs: effective.AllowedGroupIDs, Version: effective.Version})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (&identityResolver{store: store}).ResolveSender(ctx, inst, message("alice", "disabled")); !errors.Is(err, engine.ErrSenderUnbound) {
+		t.Fatalf("persisted disable fell back to ENV ingress: %v", err)
+	}
+	if _, err := policies.Save(ctx, util.MustParseUUID(installation), util.MustParseUUID(fx.WorkspaceID), util.MustParseUUID(fx.UserID), GuestAccessUpdate{Enabled: true, AllowedGroupIDs: persisted.AllowedGroupIDs, Version: persisted.Version}); err != nil {
+		t.Fatal(err)
+	}
+	if err := channelaccess.ValidateWecomActor(ctx, q, stored); !errors.Is(err, channelaccess.ErrWecomAccessDenied) {
+		t.Fatalf("old guest snapshot resurrected: %v", err)
+	}
 	// Revoked guest access must not tear down the shared bot connection.
 	fx.Exec(t, "DELETE FROM member WHERE workspace_id=$1 AND user_id=$2", fx.WorkspaceID, fx.UserID)
 	deniedMessage := message("alice", "question after sponsor removal")

@@ -18,6 +18,9 @@ type guestActors struct {
 	member db.Member
 }
 
+func (q guestActors) GetChannelInstallationByAppID(context.Context, db.GetChannelInstallationByAppIDParams) (db.ChannelInstallation, error) {
+	return db.ChannelInstallation{WorkspaceID: q.agent.WorkspaceID, AgentID: q.agent.ID, ChannelType: "wecom", Status: "active", Config: []byte(`{"bot_id":"bot"}`)}, nil
+}
 func (q guestActors) GetAgent(context.Context, pgtype.UUID) (db.Agent, error) { return q.agent, nil }
 func (q guestActors) GetMemberByUserAndWorkspace(context.Context, db.GetMemberByUserAndWorkspaceParams) (db.Member, error) {
 	return q.member, nil

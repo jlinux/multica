@@ -3,6 +3,9 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"github.com/jackc/pgx/v5"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -29,7 +32,7 @@ func TestWecomGuestTaskAuthorization(t *testing.T) {
 	t.Setenv(channelaccess.WecomEnv, string(raw))
 	guest := grant.Snapshot("external-user", "group", "group")
 	config, _ := json.Marshal(map[string]any{"wecom_guest": guest, "chat_id": "group", "sender_id": "external-user"})
-	installConfig, _ := json.Marshal(map[string]string{"bot_id": grant.BotID})
+	installConfig, _ := json.Marshal(map[string]string{"bot_id": grant.BotID, "app_id": grant.BotID})
 	installation := fx.Insert(t, "channel_installation", testutil.Cols{"workspace_id": ws, "agent_id": agent, "channel_type": "wecom", "config": installConfig, "status": "active", "installer_user_id": user})
 	session := fx.ChatSession(t, agent)
 	fx.Insert(t, "channel_chat_session_binding", testutil.Cols{"chat_session_id": session, "installation_id": installation, "channel_type": "wecom", "channel_chat_id": "wecom-guest-v1:test", "chat_type": "group", "config": config})
@@ -54,6 +57,9 @@ func TestWecomGuestTaskAuthorization(t *testing.T) {
 	}
 	if err := svc.ValidateWecomGuestTask(ctx, task); err != nil {
 		t.Fatal(err)
+	}
+	if allowed, err := validateWecomGuestRetry(ctx, db.New(guestPolicyFailureQueries{pool}), task); allowed || !errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ErrWecomGuestAccess) {
+		t.Fatalf("infrastructure failure became revocation: allowed=%v err=%v", allowed, err)
 	}
 	prepared, err := svc.PrepareChatTaskEnqueue(channelaccess.WithWecomGuest(ctx, guest), util.MustParseUUID(agent), util.MustParseUUID(user))
 	if err != nil {
@@ -127,6 +133,48 @@ func TestWecomGuestTaskAuthorization(t *testing.T) {
 	if err := svc.ValidateWecomGuestTask(ctx, *retry); err != nil {
 		t.Fatalf("valid retry rejected: %v", err)
 	}
+
+	// Persisted policy is checked for existing queued tasks, enqueue and retry,
+	// even while the legacy environment grant remains enabled.
+	savePolicy := func(enabled bool, generation string) {
+		t.Helper()
+		raw, err := json.Marshal(channelaccess.WecomPolicy{Enabled: enabled, AllowedGroupIDs: grant.AllowedGroupIDs, SponsorUserID: user, Version: uuid.NewString(), Generation: generation})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := svc.Queries.UpdateWecomGuestPolicy(ctx, db.UpdateWecomGuestPolicyParams{ID: util.MustParseUUID(installation), WorkspaceID: util.MustParseUUID(ws), GuestAccess: raw}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	savePolicy(true, "")
+	if err := svc.ValidateWecomGuestTask(ctx, task); err != nil {
+		t.Fatal("unchanged ENV takeover invalidated task:", err)
+	}
+	savePolicy(false, uuid.NewString())
+	if svc.ValidateWecomGuestTask(ctx, task) == nil {
+		t.Fatal("persisted disable allowed existing task")
+	}
+	if _, err := svc.EnqueueChannelChatTask(ctx, chat, util.MustParseUUID(user), false, 1, binding.ID, binding.RouteRevision); err == nil {
+		t.Fatal("persisted disable allowed enqueue")
+	}
+	fx.Exec(t, "UPDATE agent_task_queue SET status='cancelled' WHERE id=$1", retry.ID)
+	fx.Exec(t, "UPDATE agent_task_queue SET status='running' WHERE id=$1", task.ID)
+	beforeRetries := fx.Count(t, "SELECT count(*) FROM agent_task_queue WHERE retry_of_task_id=$1", task.ID)
+	if failed, err := svc.FailTask(ctx, task.ID, "provider connection failed", "", "", "", "agent_error.provider_network", false, "", ""); err != nil || failed == nil {
+		t.Fatalf("failed parent was not recorded: %v %v", failed, err)
+	}
+	if afterRetries := fx.Count(t, "SELECT count(*) FROM agent_task_queue WHERE retry_of_task_id=$1", task.ID); afterRetries != beforeRetries {
+		t.Fatal("persisted disable allowed in-transaction retry")
+	}
+	if deniedRetry, err := svc.MaybeRetryFailedTask(ctx, parent); err != nil || deniedRetry != nil {
+		t.Fatalf("persisted disable allowed retry: %v %v", deniedRetry, err)
+	}
+	savePolicy(true, uuid.NewString())
+	if svc.ValidateWecomGuestTask(ctx, task) == nil {
+		t.Fatal("re-enable revived old queued task")
+	}
+	// Restore the unsaved legacy fixture for the membership/ENV regressions below.
+	fx.Exec(t, "UPDATE channel_installation SET config=config-'guest_access' WHERE id=$1", installation)
 	fx.Exec(t, "UPDATE channel_installation SET status='revoked' WHERE id=$1", installation)
 	if svc.ValidateWecomGuestTask(ctx, task) == nil {
 		t.Fatal("revoked installation allowed")
@@ -141,4 +189,15 @@ func TestWecomGuestTaskAuthorization(t *testing.T) {
 	if svc.ValidateWecomGuestTask(ctx, task) == nil {
 		t.Fatal("revoked grant allowed")
 	}
+}
+
+type guestPolicyFailureQueries struct{ db.DBTX }
+type guestPolicyFailureRow struct{}
+
+func (guestPolicyFailureRow) Scan(...any) error { return context.DeadlineExceeded }
+func (q guestPolicyFailureQueries) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	if strings.Contains(sql, "GetChannelInstallationByAppID") {
+		return guestPolicyFailureRow{}
+	}
+	return q.DBTX.QueryRow(ctx, sql, args...)
 }

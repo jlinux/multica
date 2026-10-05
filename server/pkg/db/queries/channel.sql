@@ -1204,3 +1204,33 @@ SELECT EXISTS (
       AND workspace_id = @workspace_id
       AND url = @storage_url
 ) AS referenced;
+
+-- name: LockChannelInstallationAgentSlot :exec
+-- Same-agent installs of different bots and guest policy edits share this lock.
+SELECT pg_advisory_xact_lock(
+    hashtext(sqlc.arg('channel_type')::text || ':agent'),
+    hashtext(sqlc.arg('workspace_id')::uuid::text || ':' || sqlc.arg('agent_id')::uuid::text)
+);
+
+-- name: UpdateWecomGuestPolicy :one
+-- Partial update never reads or replaces credential fields. All WeCom lifecycle
+-- writes hold the bot and agent slot locks before reading this installation.
+UPDATE channel_installation
+SET config = jsonb_set(config, '{guest_access}', sqlc.arg('guest_access')::jsonb),
+    updated_at = now()
+WHERE id = sqlc.arg('id') AND workspace_id = sqlc.arg('workspace_id')
+  AND channel_type = 'wecom' AND status = 'active'
+RETURNING *;
+
+-- name: RevokeWecomInstallation :exec
+UPDATE channel_installation
+SET status = 'revoked',
+    config = jsonb_set(config, '{guest_access}', sqlc.arg('guest_access')::jsonb),
+    updated_at = now()
+WHERE id = sqlc.arg('id') AND channel_type = 'wecom';
+
+-- name: ListWecomGuestGroupBindings :many
+SELECT * FROM channel_chat_session_binding
+WHERE installation_id = sqlc.arg('installation_id')
+  AND channel_type = 'wecom' AND chat_type = 'group'
+ORDER BY created_at, id;

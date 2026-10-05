@@ -1717,6 +1717,8 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Post("/slack/install/byo", h.RegisterSlackBYO)
 					r.Delete("/wecom/installations/{installationId}", h.RevokeWecomInstallation)
 					r.Post("/wecom/install/byo", h.RegisterWecomBYO)
+					r.Get("/wecom/installations/{installationId}/guest-access", h.GetWecomGuestAccess)
+					r.Put("/wecom/installations/{installationId}/guest-access", h.UpdateWecomGuestAccess)
 				})
 
 				r.Group(func(r chi.Router) {

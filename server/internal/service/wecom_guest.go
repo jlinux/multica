@@ -74,6 +74,23 @@ func emptyGuestOverlay() runtimeMCPOverlayData {
 // ValidateWecomGuestTask rechecks delegated access at dispatch, including retries.
 // A guest marker without durable channel identity must never become a human task.
 func (s *TaskService) ValidateWecomGuestTask(ctx context.Context, task db.AgentTaskQueue) error {
+	return validateWecomGuestTask(ctx, s.Queries, task)
+}
+
+// A revoked guest may not create new retry attempts. Infrastructure failures
+// remain errors so the caller can retry admission after recovery.
+func validateWecomGuestRetry(ctx context.Context, q *db.Queries, task db.AgentTaskQueue) (bool, error) {
+	err := validateWecomGuestTask(ctx, q, task)
+	if errors.Is(err, ErrWecomGuestAccess) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func validateWecomGuestTask(ctx context.Context, q *db.Queries, task db.AgentTaskQueue) error {
 	marked := task.OriginatorSource.String == channelaccess.WecomGuestSource
 	if !task.ChatSessionID.Valid {
 		if marked {
@@ -81,7 +98,7 @@ func (s *TaskService) ValidateWecomGuestTask(ctx context.Context, task db.AgentT
 		}
 		return nil
 	}
-	binding, err := s.Queries.GetChannelChatSessionBindingBySessionAny(ctx, task.ChatSessionID)
+	binding, err := q.GetChannelChatSessionBindingBySessionAny(ctx, task.ChatSessionID)
 	if errors.Is(err, pgx.ErrNoRows) && !marked {
 		return nil
 	}
@@ -91,7 +108,7 @@ func (s *TaskService) ValidateWecomGuestTask(ctx context.Context, task db.AgentT
 		}
 		return err
 	}
-	guest, err := wecomGuestBinding(ctx, s.Queries, binding)
+	guest, err := wecomGuestBinding(ctx, q, binding)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrWecomGuestAccess
@@ -108,7 +125,7 @@ func (s *TaskService) ValidateWecomGuestTask(ctx context.Context, task db.AgentT
 		return ErrWecomGuestAccess
 	}
 
-	delivery, err := s.Queries.GetChannelTaskDelivery(ctx, task.ID)
+	delivery, err := q.GetChannelTaskDelivery(ctx, task.ID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrWecomGuestAccess
@@ -130,7 +147,7 @@ func (s *TaskService) ValidateWecomGuestTask(ctx context.Context, task db.AgentT
 	if len(task.RuntimeConnectedApps) > 0 && (json.Unmarshal(task.RuntimeConnectedApps, &apps) != nil || len(apps) > 0) {
 		return ErrWecomGuestAccess
 	}
-	session, err := s.Queries.GetChatSession(ctx, task.ChatSessionID)
+	session, err := q.GetChatSession(ctx, task.ChatSessionID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrWecomGuestAccess

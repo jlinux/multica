@@ -77,6 +77,8 @@ const (
 // never plaintext; callers who need the plaintext go through the Credentials
 // resolver.
 type Installation struct {
+	// Config is the original sealed JSON retained for partial lifecycle updates.
+	Config          json.RawMessage
 	ID              pgtype.UUID
 	WorkspaceID     pgtype.UUID
 	AgentID         pgtype.UUID
@@ -157,6 +159,7 @@ func installationFromRow(row db.ChannelInstallation) (Installation, error) {
 	}
 	return Installation{
 		ID:              row.ID,
+		Config:          row.Config,
 		WorkspaceID:     row.WorkspaceID,
 		AgentID:         row.AgentID,
 		InstallerUserID: row.InstallerUserID,

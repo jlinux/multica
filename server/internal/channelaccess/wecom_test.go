@@ -17,11 +17,11 @@ func TestWecomGrantBoundaries(t *testing.T) {
 		t.Fatal("chat boundary not enforced")
 	}
 	snap := g.Snapshot("sender", "group", "group")
-	if err := ValidateWecomSnapshot(snap); err != nil {
+	if err := validateEnvironmentSnapshot(snap); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv(WecomEnv, "[]")
-	if err := ValidateWecomSnapshot(snap); err == nil {
+	if err := validateEnvironmentSnapshot(snap); err == nil {
 		t.Fatal("revoked grant accepted")
 	}
 }
@@ -45,7 +45,7 @@ func TestWecomSnapshotTampering(t *testing.T) {
 	} {
 		s := g.Snapshot("sender", "group", "group")
 		change(s)
-		if ValidateWecomSnapshot(s) == nil {
+		if validateEnvironmentSnapshot(s) == nil {
 			t.Fatal("tampered snapshot accepted")
 		}
 	}
@@ -60,7 +60,7 @@ func TestWecomPolicyExactScopeAndExplicitPrivateAccess(t *testing.T) {
 	g.AllowDirectMessages = true
 	raw, _ := json.Marshal([]WecomGrant{*g})
 	t.Setenv(WecomEnv, string(raw))
-	if err := ValidateWecomSnapshot(g.Snapshot("visitor", "visitor", "p2p")); err != nil {
+	if err := validateEnvironmentSnapshot(g.Snapshot("visitor", "visitor", "p2p")); err != nil {
 		t.Fatal(err)
 	}
 	raw, _ = json.Marshal([]WecomGrant{*g, *g})
@@ -74,4 +74,12 @@ func TestWecomPolicyExactScopeAndExplicitPrivateAccess(t *testing.T) {
 	if _, err := LookupWecom("bot"); err == nil {
 		t.Fatal("wildcard group accepted")
 	}
+}
+
+func validateEnvironmentSnapshot(s *WecomGuest) error {
+	g, err := LookupWecom(s.BotID)
+	if err != nil {
+		return err
+	}
+	return ValidateWecomGrantSnapshot(g, s)
 }

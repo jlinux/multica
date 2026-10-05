@@ -1902,6 +1902,51 @@ func (q *Queries) ListChannelOutboundMessagesByIDs(ctx context.Context, arg List
 	return items, nil
 }
 
+const listWecomGuestGroupBindings = `-- name: ListWecomGuestGroupBindings :many
+SELECT id, chat_session_id, installation_id, channel_type, channel_chat_id, chat_type, last_message_id, last_thread_id, config, created_at, pending_fresh, context_revision, route_revision, retired_at, history_start_message_id, history_end_message_id, history_boundary_pending FROM channel_chat_session_binding
+WHERE installation_id = $1
+  AND channel_type = 'wecom' AND chat_type = 'group'
+ORDER BY created_at, id
+`
+
+func (q *Queries) ListWecomGuestGroupBindings(ctx context.Context, installationID pgtype.UUID) ([]ChannelChatSessionBinding, error) {
+	rows, err := q.db.Query(ctx, listWecomGuestGroupBindings, installationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ChannelChatSessionBinding{}
+	for rows.Next() {
+		var i ChannelChatSessionBinding
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatSessionID,
+			&i.InstallationID,
+			&i.ChannelType,
+			&i.ChannelChatID,
+			&i.ChatType,
+			&i.LastMessageID,
+			&i.LastThreadID,
+			&i.Config,
+			&i.CreatedAt,
+			&i.PendingFresh,
+			&i.ContextRevision,
+			&i.RouteRevision,
+			&i.RetiredAt,
+			&i.HistoryStartMessageID,
+			&i.HistoryEndMessageID,
+			&i.HistoryBoundaryPending,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockChannelChatContextGenerationByRevision = `-- name: LockChannelChatContextGenerationByRevision :one
 SELECT chat_session_id, revision, history_start_message_id, history_end_message_id, history_boundary_pending, pending_fresh, initiator_user_id, created_at FROM channel_chat_context_generation
 WHERE chat_session_id = $1
@@ -1978,6 +2023,25 @@ func (q *Queries) LockChannelChatSessionPendingFresh(ctx context.Context, chatSe
 	var pending_fresh bool
 	err := row.Scan(&pending_fresh)
 	return pending_fresh, err
+}
+
+const lockChannelInstallationAgentSlot = `-- name: LockChannelInstallationAgentSlot :exec
+SELECT pg_advisory_xact_lock(
+    hashtext($1::text || ':agent'),
+    hashtext($2::uuid::text || ':' || $3::uuid::text)
+)
+`
+
+type LockChannelInstallationAgentSlotParams struct {
+	ChannelType string      `json:"channel_type"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	AgentID     pgtype.UUID `json:"agent_id"`
+}
+
+// Same-agent installs of different bots and guest policy edits share this lock.
+func (q *Queries) LockChannelInstallationAgentSlot(ctx context.Context, arg LockChannelInstallationAgentSlotParams) error {
+	_, err := q.db.Exec(ctx, lockChannelInstallationAgentSlot, arg.ChannelType, arg.WorkspaceID, arg.AgentID)
+	return err
 }
 
 const lockChannelInstallationAppIDSlot = `-- name: LockChannelInstallationAppIDSlot :exec
@@ -2560,6 +2624,24 @@ func (q *Queries) RetireChannelChatSessionBinding(ctx context.Context, arg Retir
 	return i, err
 }
 
+const revokeWecomInstallation = `-- name: RevokeWecomInstallation :exec
+UPDATE channel_installation
+SET status = 'revoked',
+    config = jsonb_set(config, '{guest_access}', $1::jsonb),
+    updated_at = now()
+WHERE id = $2 AND channel_type = 'wecom'
+`
+
+type RevokeWecomInstallationParams struct {
+	GuestAccess []byte      `json:"guest_access"`
+	ID          pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) RevokeWecomInstallation(ctx context.Context, arg RevokeWecomInstallationParams) error {
+	_, err := q.db.Exec(ctx, revokeWecomInstallation, arg.GuestAccess, arg.ID)
+	return err
+}
+
 const setChannelChatContextInitiator = `-- name: SetChannelChatContextInitiator :one
 UPDATE channel_chat_context_generation
 SET initiator_user_id = $1
@@ -2734,6 +2816,43 @@ type UpdateChannelOutboundCardStatusParams struct {
 func (q *Queries) UpdateChannelOutboundCardStatus(ctx context.Context, arg UpdateChannelOutboundCardStatusParams) error {
 	_, err := q.db.Exec(ctx, updateChannelOutboundCardStatus, arg.ID, arg.Status)
 	return err
+}
+
+const updateWecomGuestPolicy = `-- name: UpdateWecomGuestPolicy :one
+UPDATE channel_installation
+SET config = jsonb_set(config, '{guest_access}', $1::jsonb),
+    updated_at = now()
+WHERE id = $2 AND workspace_id = $3
+  AND channel_type = 'wecom' AND status = 'active'
+RETURNING id, workspace_id, agent_id, channel_type, config, status, ws_lease_token, ws_lease_expires_at, installer_user_id, installed_at, created_at, updated_at
+`
+
+type UpdateWecomGuestPolicyParams struct {
+	GuestAccess []byte      `json:"guest_access"`
+	ID          pgtype.UUID `json:"id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+}
+
+// Partial update never reads or replaces credential fields. All WeCom lifecycle
+// writes hold the bot and agent slot locks before reading this installation.
+func (q *Queries) UpdateWecomGuestPolicy(ctx context.Context, arg UpdateWecomGuestPolicyParams) (ChannelInstallation, error) {
+	row := q.db.QueryRow(ctx, updateWecomGuestPolicy, arg.GuestAccess, arg.ID, arg.WorkspaceID)
+	var i ChannelInstallation
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.AgentID,
+		&i.ChannelType,
+		&i.Config,
+		&i.Status,
+		&i.WsLeaseToken,
+		&i.WsLeaseExpiresAt,
+		&i.InstallerUserID,
+		&i.InstalledAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const upsertChannelInstallation = `-- name: UpsertChannelInstallation :one

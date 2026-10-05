@@ -4923,6 +4923,13 @@ func (s *TaskService) FailTask(ctx context.Context, taskID pgtype.UUID, errMsg, 
 		// failed status.
 		createRetry := wantRetry
 		if createRetry {
+			allowed, accessErr := validateWecomGuestRetry(ctx, qtx, t)
+			if accessErr != nil {
+				return fmt.Errorf("validate guest auto-retry: %w", accessErr)
+			}
+			createRetry = allowed
+		}
+		if createRetry {
 			successor, herr := hasRunnableSuccessor(ctx, qtx, t)
 			if herr != nil {
 				return fmt.Errorf("check runnable successor: %w", herr)
@@ -5410,6 +5417,14 @@ func (s *TaskService) MaybeRetryFailedTask(ctx context.Context, parent db.AgentT
 	}
 	defer tx.Rollback(ctx)
 	qtx := s.Queries.WithTx(tx)
+	allowed, err := validateWecomGuestRetry(ctx, qtx, parent)
+	if err != nil {
+		return nil, fmt.Errorf("validate guest auto-retry: %w", err)
+	}
+	if !allowed {
+		return nil, nil
+	}
+
 	child, err := qtx.CreateRetryTask(ctx, db.CreateRetryTaskParams{
 		NewTaskID:            dbid.NewV7(),
 		ID:                   parent.ID,

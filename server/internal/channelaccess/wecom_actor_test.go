@@ -17,6 +17,9 @@ type actorFake struct {
 	memberErr error
 }
 
+func (f actorFake) GetChannelInstallationByAppID(context.Context, db.GetChannelInstallationByAppIDParams) (db.ChannelInstallation, error) {
+	return db.ChannelInstallation{WorkspaceID: actorUUID("11111111-1111-1111-1111-111111111111"), AgentID: actorUUID("22222222-2222-2222-2222-222222222222"), ChannelType: "wecom", Status: "active", Config: []byte(`{"bot_id":"bot"}`)}, nil
+}
 func (f actorFake) GetAgent(context.Context, pgtype.UUID) (db.Agent, error) { return f.agent, f.err }
 func (f actorFake) GetMemberByUserAndWorkspace(context.Context, db.GetMemberByUserAndWorkspaceParams) (db.Member, error) {
 	return f.member, f.memberErr
