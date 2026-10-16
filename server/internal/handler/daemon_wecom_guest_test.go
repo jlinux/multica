@@ -55,7 +55,7 @@ func TestGuestClaimFailureClassification(t *testing.T) {
 				svc.Queries = db.New(guestLookupFailureDB{testPool})
 			}
 			req := newDaemonTokenRequest(http.MethodPost, "/claim", nil, testWorkspaceID, "guest-claim")
-			_, _, _, _, failure := h.buildClaimedTaskResponse(req, &task, db.AgentRuntime{}, runtimeID, testWorkspaceID)
+			_, _, _, _, _, failure := h.buildClaimedTaskResponse(req, &task, db.AgentRuntime{}, runtimeID, testWorkspaceID)
 			if failure == nil {
 				t.Fatal("claim unexpectedly dispatched")
 			}

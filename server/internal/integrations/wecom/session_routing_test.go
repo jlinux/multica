@@ -130,3 +130,29 @@ func TestIsolatedRouteRelaysRealGroup(t *testing.T) {
 		t.Fatalf("wrong relay destination: %+v", frame)
 	}
 }
+
+// v0.6.2 resolves every non-stream text/file/relay target through the task's
+// immutable delivery snapshot. Synthetic member and guest routes must recover
+// the original transport ID at this shared boundary.
+func TestTaskAddressUsesIsolatedDeliveryTransportID(t *testing.T) {
+	for _, tc := range []struct {
+		name, key, config, want string
+		bad                     bool
+	}{
+		{"legacy", "real-group", `{}`, "real-group", false},
+		{"member", "wecom-group-v1:hash", `{"chat_id":"real-group","sender_id":"alice"}`, "real-group", false},
+		{"guest", "wecom-guest-v1:hash", `{"chat_id":"real-group","sender_id":"visitor"}`, "real-group", false},
+		{"member missing target", "wecom-group-v1:hash", `{}`, "", true},
+		{"guest missing target", "wecom-guest-v1:hash", `{}`, "", true},
+		{"corrupt target", "wecom-guest-v1:hash", `{`, "", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			q := oneAttachmentQueries(t, db.Attachment{})
+			q.sessionBinding.ChannelChatID, q.sessionBinding.Config = tc.key, []byte(tc.config)
+			addr, skip, hadRow, err := taskAddress(context.Background(), q, mustPgUUID(t, testTaskID))
+			if (err != nil) != tc.bad || addr.ChatID != tc.want || !hadRow || skip != "" {
+				t.Fatalf("address=%+v skip=%q hadRow=%v err=%v", addr, skip, hadRow, err)
+			}
+		})
+	}
+}

@@ -1,0 +1,210 @@
+{
+  "badge": {
+    "retro": "Consigné après coup",
+    "continues": "Prolonge un objectif précédent"
+  },
+  "chain": {
+    "clear": "Effacer la mise en évidence",
+    "focus": "Mettre cette chaîne en évidence",
+    "open": "Ouvrir l’objectif"
+  },
+  "cost": {
+    "by_provider": "Par outil exécuté",
+    "heading": "Coût de réalisation",
+    "hint": "Calculé à partir des exécutions qui ont contribué à sa réalisation — aucune saisie manuelle",
+    "issues": "Tâches",
+    "no_spend": "Aucun agent n’a encore travaillé sur cet objectif",
+    "rolled_up_one": "Cumulé sur {{count}} objectif",
+    "rolled_up_other": "Cumulé sur {{count}} objectifs",
+    "runs": "Exécutions d’agents",
+    "spend": "Dépenses",
+    "uncosted_hint": "Affiché sans être considéré comme gratuit — un coût inconnu n’est pas un coût faible",
+    "uncosted_one": "Plus {{count}} jeton non tarifé par le fournisseur",
+    "uncosted_other": "Plus {{count}} jetons non tarifés par le fournisseur"
+  },
+  "detail": {
+    "achieved_on": "Atteint le",
+    "actual": "Date réelle",
+    "add_milestone": "Ajouter un jalon",
+    "adoption_agent": "Un agent vérifie et fournit des preuves",
+    "adoption_analytics": "Un seuil d’événements dans vos propres données de suivi",
+    "adoption_verifier": "Une personne désignée confirme",
+    "aligns_to": "Contribue à",
+    "assignee_agent": "Agent",
+    "back": "Objectifs",
+    "continues": "Prolonge",
+    "cycle": "Cycle",
+    "delayed": "En retard",
+    "due": "Échéance",
+    "issues": "Travail contribuant à cet objectif",
+    "issues_hint": "Ces tâches peuvent être confiées à une personne ou à un agent",
+    "mark_achieved": "Marquer comme atteint",
+    "mark_achieved_hint": "Enregistre la date d’aujourd’hui comme date de réalisation",
+    "milestones": "Jalons",
+    "milestones_hint": "Lancement, puis première utilisation réelle, puis utilisation durable",
+    "no_alignment": "Indépendant",
+    "no_issues": "Aucune tâche liée pour le moment",
+    "no_milestones": "Aucun jalon pour le moment",
+    "no_milestones_hint": "Fixez une date de lancement pour cet objectif. Après sa livraison, le système demande si quelqu’un l’a utilisé.",
+    "not_found": "Cet objectif n’existe pas ou n’appartient pas à cet espace de travail",
+    "owner": "Responsable",
+    "planned": "Prévu",
+    "proposal_pending_one": "{{count}} proposition d’agent attend votre décision",
+    "proposal_pending_other": "{{count}} propositions d’agents attendent votre décision",
+    "seam_body": "Les orientations et les objectifs de produit ou de cycle servent à planifier : ils n’entrent jamais dans la file des tâches et n’apparaissent jamais dans Mes tâches. Le travail confié à un agent est une tâche liée ci-dessous.",
+    "seam_title": "Cet objectif ne peut pas être confié à un agent",
+    "send_for_acceptance": "Soumettre pour validation",
+    "send_for_acceptance_hint": "Transmet à la personne ou au contrôle chargé de déterminer si le résultat a réellement été utilisé",
+    "unassigned": "Non attribué",
+    "verifier": "Vérifié par"
+  },
+  "empty": {
+    "title": "Aucun objectif pour le moment",
+    "description": "Un objectif décrit le résultat attendu de cette période de travail. Une fois défini, le système pose régulièrement ces questions : a-t-il été livré, quelqu’un l’a-t-il utilisé, est-il toujours utilisé ?",
+    "action": "Créer le premier objectif",
+    "footnote": "Un seul niveau pour commencer. Lorsque les objectifs se multiplient entre les projets, vous pouvez ajouter un niveau pour les regrouper."
+  },
+  "error": {
+    "title": "Impossible de charger les objectifs",
+    "retry": "Réessayer"
+  },
+  "form": {
+    "adoption": "Comment l’adoption est vérifiée",
+    "cancel": "Annuler",
+    "create_goal": "Nouvel objectif",
+    "create_goal_submit": "Créer l’objectif",
+    "create_milestone": "Ajouter un jalon",
+    "create_milestone_submit": "Ajouter le jalon",
+    "cycle": "Cycle",
+    "cycle_placeholder": "2e semestre 2026",
+    "description": "Description",
+    "due": "Date d’échéance",
+    "kind": "Type",
+    "milestone_title_placeholder": "Quel résultat sera obtenu ?",
+    "milestone_type": "Étape",
+    "nth": "Quelle utilisation",
+    "orphan_reason": "Pourquoi cet objectif est indépendant",
+    "orphan_reason_placeholder": "Une ligne suffit",
+    "parent": "Contribue à",
+    "parent_none": "Aucun — cet objectif est indépendant",
+    "planned_date": "Date prévue",
+    "project": "Produit",
+    "project_none": "Choisir un produit",
+    "required": "Obligatoire",
+    "reschedule": "Déplacer la date",
+    "reschedule_hint": "La date initialement prévue reste sur le jalon. La réalisation est évaluée par rapport à cette date.",
+    "reschedule_reason": "Motif",
+    "reschedule_reason_placeholder": "Conservé dans l’historique ; jamais utilisé pour attribuer des torts",
+    "reschedule_submit": "Déplacer",
+    "saving": "Enregistrement…",
+    "tier": "Niveau",
+    "title": "Titre",
+    "title_placeholder": "Quel résultat cet objectif apporte-t-il ?",
+    "value_statement": "Valeur apportée",
+    "value_statement_placeholder": "Dans les mots des personnes qui l’utiliseront",
+    "verifier_label": "Qui confirme",
+    "verifier_label_placeholder": "Nom ou équipe"
+  },
+  "issue_panel": {
+    "heading": "Objectifs",
+    "hint": "Ce que ce travail permet de réaliser",
+    "none": "Aucun objectif lié",
+    "pending_one": "{{count}} proposition de jalon issue de ce travail",
+    "pending_other": "{{count}} propositions de jalons issues de ce travail"
+  },
+  "kind": {
+    "base": "Pérenniser",
+    "brk": "Explorer"
+  },
+  "milestone": {
+    "launch": "Lancement",
+    "first_use": "Première utilisation réelle",
+    "nth_use": "Toujours utilisé",
+    "progress": "{{done}} jalons atteints sur 3"
+  },
+  "orphan": {
+    "section": "Objectifs sans rattachement",
+    "hint": "Un choix délibéré : du travail ponctuel qui n’a pas à se rattacher à une orientation",
+    "badge": "Sans rattachement"
+  },
+  "page": {
+    "title": "Objectifs",
+    "subtitle": "Orientations, objectifs de produit et résultats de ce cycle",
+    "new_goal": "Nouvel objectif",
+    "loading": "Chargement des objectifs"
+  },
+  "proposal": {
+    "accept": "Accepter",
+    "accepting": "Acceptation…",
+    "conflict": "Une autre personne a déjà statué sur cette proposition",
+    "decided_accepted": "Acceptée",
+    "decided_rejected": "Refusée",
+    "decided_superseded": "Remplacée par une proposition plus récente",
+    "evidence": "Preuves",
+    "heading": "Proposition d’un agent",
+    "human_only": "Un agent ne peut pas accepter sa propre proposition. Une personne décide.",
+    "none": "Aucune proposition pour le moment",
+    "note_placeholder": "Ajouter une note (facultatif)",
+    "open_issue": "Tâche d’origine",
+    "open_run": "Ouvrir l’exécution à l’origine de la proposition",
+    "proposed_by": "Proposé par un agent",
+    "proposes_achieved": "propose de considérer ce jalon comme atteint",
+    "proposes_pending": "propose de soumettre ce jalon à validation",
+    "reject": "Refuser"
+  },
+  "stats": {
+    "adopted": "Utilisé par quelqu’un",
+    "adopted_hint": "Parmi les objectifs lancés",
+    "aggregate_note": "Agrégé par équipe et par période. Aucune ventilation individuelle n’est proposée, et aucun réglage ne permet d’en ajouter une.",
+    "alignment": "Avec des objectifs contributeurs",
+    "launched": "Lancés",
+    "on_time": "À temps",
+    "on_time_hint": "Évalué par rapport à la date initialement prévue : déplacer une date ne peut pas transformer un retard en réussite",
+    "overdue": "En retard",
+    "retro": "Consigné après coup"
+  },
+  "status": {
+    "not_started": "Non commencé",
+    "in_progress": "En cours",
+    "at_risk": "À risque",
+    "done": "Terminé",
+    "archived": "Archivé"
+  },
+  "tier": {
+    "direction": "Direction",
+    "direction_hint": "1 à 3 ans",
+    "product": "Objectifs de produit",
+    "product_hint": "6 à 12 mois",
+    "cycle": "Objectifs de cycle",
+    "cycle_hint": "2 semaines à 3 mois",
+    "aligns_to": "contribue à",
+    "count_one": "{{count}} objectif",
+    "count_other": "{{count}} objectifs"
+  },
+  "timeline": {
+    "empty_description": "Les jalons apparaissent ici dès qu’un objectif en possède. Chaque objectif reçoit d’abord une date de lancement ; l’adoption vient ensuite.",
+    "empty_title": "La feuille de route est encore vide",
+    "gap_days_one": "{{count}} jour",
+    "gap_days_other": "{{count}} jours",
+    "legend_first_use": "Première utilisation réelle",
+    "legend_launch": "Lancement",
+    "legend_moved": "Date initialement prévue",
+    "legend_nth_use": "Toujours utilisé",
+    "legend_unused": "Livré, mais encore inutilisé",
+    "moved_from": "Initialement le {{date}}",
+    "moved_times_one": "Déplacé une fois",
+    "moved_times_other": "Déplacé {{count}} fois",
+    "no_product": "Aucun produit",
+    "subtitle": "Les jalons sont regroupés par produit. Ce qui compte ici, c’est l’écart entre les repères, pas leur longueur.",
+    "today": "Aujourd’hui",
+    "unused_days_one": "Livré il y a {{count}} jour, toujours inutilisé",
+    "unused_days_other": "Livré il y a {{count}} jours, toujours inutilisé"
+  },
+  "view": {
+    "panorama": "Panorama",
+    "timeline": "Chronologie"
+  },
+  "warning": {
+    "unpicked": "Aucun objectif ne contribue encore à celui-ci"
+  }
+}

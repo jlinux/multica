@@ -141,3 +141,49 @@ func TestGuestAccessDeniedDoesNotFailConnector(t *testing.T) {
 		}
 	}
 }
+
+// A guest's resolved identity is its authorized sponsor; upstream's invocation
+// gate must inspect that identity while preserving the external guest context.
+func TestGuestInvocationGateUsesSponsor(t *testing.T) {
+	for _, deny := range []bool{false, true} {
+		t.Run(fmt.Sprintf("denied=%t", deny), func(t *testing.T) {
+			h := newHarness(t)
+			guest := &channelaccess.WecomGuest{SenderID: "visitor"}
+			h.ident.id.WecomGuest = guest
+			h.tasks.denyInvoke = deny
+			probe := &guestInvokeTasks{fakeTasks: h.tasks}
+			h.router.tasks = probe
+			msg := p2pMessage(t)
+			msg.Source.ChatType = channel.ChatTypeGroup
+			msg.AddressedToBot = true
+			if err := h.router.Handle(context.Background(), msg); err != nil {
+				t.Fatal(err)
+			}
+			h.router.Drain(context.Background())
+			if probe.userID != h.ident.id.UserID || probe.agentID != h.inst.inst.AgentID || probe.guest != guest {
+				t.Fatalf("invoke gate lost sponsor or guest: %+v", probe)
+			}
+			if deny {
+				if h.binder.ensureCalls != 0 || h.binder.startCalls != 0 {
+					t.Fatal("denied guest reached session pipeline")
+				}
+				if got := h.replier.calls(); len(got) != 1 || got[0].Outcome != OutcomeInvokeDenied {
+					t.Fatalf("outcome: %+v", got)
+				}
+			} else if h.binder.ensureCalls != 1 {
+				t.Fatal("authorized guest did not reach session pipeline")
+			}
+		})
+	}
+}
+
+type guestInvokeTasks struct {
+	*fakeTasks
+	userID, agentID pgtype.UUID
+	guest           *channelaccess.WecomGuest
+}
+
+func (p *guestInvokeTasks) MemberMayInvokeAgent(ctx context.Context, agentID, userID pgtype.UUID) (bool, error) {
+	p.userID, p.agentID, p.guest = userID, agentID, channelaccess.WecomGuestFromContext(ctx)
+	return p.fakeTasks.MemberMayInvokeAgent(ctx, agentID, userID)
+}

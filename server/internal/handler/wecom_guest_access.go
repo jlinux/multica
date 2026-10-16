@@ -12,6 +12,12 @@ import (
 )
 
 func (h *Handler) wecomGuestAccessScope(w http.ResponseWriter, r *http.Request) (pgtype.UUID, pgtype.UUID, bool) {
+	// Grants require a human administrator's consent, not an agent/runtime
+	// credential carrying that administrator's user ID.
+	if isMachineCredentialActor(r) {
+		writeError(w, http.StatusForbidden, "this endpoint is only available to human actors")
+		return pgtype.UUID{}, pgtype.UUID{}, false
+	}
 	ws, ok := parseUUIDOrBadRequest(w, chi.URLParam(r, "id"), "workspace id")
 	if !ok {
 		return ws, pgtype.UUID{}, false

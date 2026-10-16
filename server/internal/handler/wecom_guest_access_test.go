@@ -5,14 +5,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/multica-ai/multica/server/internal/auth"
 	"github.com/multica-ai/multica/server/internal/integrations/channel/engine"
 	"github.com/multica-ai/multica/server/internal/integrations/wecom"
 	"github.com/multica-ai/multica/server/internal/middleware"
 	"github.com/multica-ai/multica/server/internal/util/secretbox"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/multica-ai/multica/server/internal/channelaccess"
@@ -234,4 +238,85 @@ func TestWecomGuestAccessEnvironmentVersionCannotOverwriteChangedGrant(t *testin
 	wrongChannel := dbfx.Insert(t, "channel_installation", testutil.Cols{"workspace_id": testWorkspaceID, "agent_id": agent, "installer_user_id": testUserID, "channel_type": "slack", "config": []byte(`{}`)})
 	testutil.Call(t, testHandler.GetWecomGuestAccess, guestAccessRequest("GET", testWorkspaceID, wrongChannel, testUserID, nil)).Want(404)
 	testutil.Call(t, testHandler.UpdateWecomGuestAccess, guestAccessRequest("PUT", testWorkspaceID, wrongChannel, testUserID, map[string]any{})).Want(404)
+}
+
+// Auth intentionally resolves machine tokens to the runtime/node owner. That
+// owner's admin role must not authorize an agent to widen its own guest grant.
+func TestWecomGuestAccessRequiresAuthenticatedHumanAdmin(t *testing.T) {
+	fleet := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"valid": true, "owner_id": testUserID})
+	}))
+	defer fleet.Close()
+	cloud := auth.NewCloudPATVerifier(auth.CloudPATVerifierConfig{FleetBaseURL: fleet.URL})
+	for _, actor := range []string{"task_token", "cloud_pat", "human_pat"} {
+		t.Run(actor, func(t *testing.T) {
+			id, agentID, _ := guestAccessFixture(t)
+			var policy wecom.GuestAccessResponse
+			testutil.Call(t, testHandler.GetWecomGuestAccess, guestAccessRequest("GET", testWorkspaceID, id, testUserID, nil)).Want(200).JSON(&policy)
+			var token string
+			var err error
+			switch actor {
+			case "task_token":
+				token, err = auth.GenerateAgentTaskToken()
+				if err != nil {
+					t.Fatal(err)
+				}
+				agent, err := testHandler.Queries.GetAgent(context.Background(), parseUUID(agentID))
+				if err != nil {
+					t.Fatal(err)
+				}
+				// An ordinary-member agent may use this public, admin-owned runtime.
+				dbfx.Exec(t, "UPDATE agent_runtime SET visibility='public' WHERE id=$1", agent.RuntimeID)
+				taskID := dbfx.Task(t, agentID, testutil.Cols{"runtime_id": agent.RuntimeID})
+				row, err := testHandler.Queries.CreateTaskToken(context.Background(), db.CreateTaskTokenParams{
+					TokenHash: auth.HashToken(token), TaskID: parseUUID(taskID), AgentID: agent.ID, WorkspaceID: parseUUID(testWorkspaceID), UserID: parseUUID(testUserID), ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				cleanupRow(t, "task_token", row.ID)
+			case "cloud_pat":
+				token = "mcn_guest_access_regression"
+			case "human_pat":
+				token, err = auth.GeneratePATToken()
+				if err != nil {
+					t.Fatal(err)
+				}
+				row, err := testHandler.Queries.CreatePersonalAccessToken(context.Background(), db.CreatePersonalAccessTokenParams{UserID: parseUUID(testUserID), Name: "guest policy human admin", TokenHash: auth.HashToken(token), TokenPrefix: token[:8]})
+				if err != nil {
+					t.Fatal(err)
+				}
+				cleanupRow(t, "personal_access_token", row.ID)
+			}
+			router := chi.NewRouter()
+			router.Use(middleware.Auth(testHandler.Queries, nil, cloud, nil))
+			path := "/api/workspaces/{id}/wecom/installations/{installationId}/guest-access"
+			router.With(middleware.RequireWorkspaceRoleFromURL(testHandler.Queries, "id", "owner", "admin")).Get(path, testHandler.GetWecomGuestAccess)
+			router.With(middleware.RequireWorkspaceRoleFromURL(testHandler.Queries, "id", "owner", "admin")).Put(path, testHandler.UpdateWecomGuestAccess)
+			for _, method := range []string{"GET", "PUT"} {
+				t.Run(method, func(t *testing.T) {
+					var body any
+					if method == "PUT" {
+						body = map[string]any{"enabled": true, "allowed_group_ids": []string{"expanded-group"}, "allow_direct_messages": true, "version": policy.Version}
+					}
+					req := guestAccessRequest(method, testWorkspaceID, id, testUserID, body)
+					req.Header.Set("Authorization", "Bearer "+token)
+					// A caller may try to masquerade as a human; Auth must replace this.
+					req.Header.Set("X-Actor-Source", "human")
+					want := http.StatusForbidden
+					expectedSource := actor
+					if actor == "human_pat" {
+						want = http.StatusOK
+						expectedSource = ""
+					}
+					result := testutil.Call(t, router.ServeHTTP, req)
+					if req.Header.Get("X-Actor-Source") != expectedSource {
+						t.Fatalf("Auth actor source=%q, want %q", req.Header.Get("X-Actor-Source"), expectedSource)
+					}
+					result.Want(want)
+				})
+			}
+		})
+	}
 }

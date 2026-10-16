@@ -23,8 +23,9 @@ func goalMigrationFiles(t *testing.T) []string {
 	}
 	var result []string
 	for _, f := range files {
-		n, _ := strconv.Atoi(filepath.Base(f)[:3])
-		if n >= 456 && n <= 473 {
+		// Upstream migrations can share a numeric prefix with fork migrations.
+		// Select the full identities used by the runner, not a number range.
+		if _, ok := goalMigrationAliases[migrations.ExtractVersion(f)]; ok {
 			result = append(result, f)
 		}
 	}
